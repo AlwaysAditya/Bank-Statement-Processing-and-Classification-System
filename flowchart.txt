@@ -1,16 +1,16 @@
-                         ┌───────────────┐
-                         │   Streamlit   │
-                         │    app.py     │
-                         └───────┬───────┘
-                                 │
-                                 ▼
-                         ┌───────────────┐
-                         │ Upload PDF    │
-                         └───────┬───────┘
-                                 │
-                                 ▼
+                          ┌───────────────┐
+                          │   Streamlit   │
+                          │    app.py     │
+                          └───────┬───────┘
+                                  │
+                                  ▼
+                          ┌───────────────┐
+                          │  Upload PDF   │
+                          └───────┬───────┘
+                                  │
+                                  ▼
                     ┌────────────────────────┐
-                    │   pdf_detector.py      │
+                    │     pdf_detector.py    │
                     │                        │
                     │ Is PDF text-based or   │
                     │ image/scanned?         │
@@ -18,35 +18,38 @@
                                 │
                     ┌───────────┴───────────┐
                     │                       │
-              TEXT PDF                 IMAGE PDF
+               TEXT PDF                 IMAGE PDF
                     │                       │
                     ▼                       ▼
-        ┌───────────────────┐    ┌───────────────────┐
-        │ text_processor.py │    │ ocr_processor.py  │
-        │                   │    │                   │
-        │ PyMuPDF           │    │ PDF → Image       │
-        │ pdfplumber        │    │ OpenCV            │
-        │ Text/Table        │    │ Tesseract OCR     │
-        │ Extraction        │    │                   │
-        └─────────┬─────────┘    └─────────┬─────────┘
+        ┌───────────────────┐   ┌───────────────────┐
+        │ text_processor.py │   │ ocr_processor.py  │
+        │                   │   │                   │
+        │ PyMuPDF           │   │ PDF → Image       │
+        │ pdfplumber        │   │ OpenCV            │
+        │ Text/Table        │   │ Tesseract OCR     │
+        │ Extraction        │   │                   │
+        └─────────┬─────────┘   └─────────┬─────────┘
+                  │                       │
+                  └───────────┬───────────┘
+                              │
+                              ▼
+                  ┌────────────────────────┐
+                  │ transaction_extractor.py│
                   │                        │
-                  └───────────┬────────────┘
-                              ▼
-                 ┌────────────────────────┐
-                 │ transaction_extractor.py│
-                 │                        │
-                 │ Account details        │
-                 │ Date                   │
-                 │ Description            │
-                 │ Debit                  │
-                 │ Credit                 │
-                 │ Balance                │
-                 └────────────┬───────────┘
-                              ▼
+                  │ Account details        │
+                  │ Date                   │
+                  │ Description            │
+                  │ Debit                  │
+                  │ Credit                 │
+                  │ Balance                │
+                  └────────────┬───────────┘
+                               │
+                               ▼
                     ┌──────────────────┐
                     │ Data Cleaning &  │
                     │ Normalization    │
                     └────────┬─────────┘
+                             │
                              ▼
                     ┌──────────────────┐
                     │   validator.py   │
@@ -55,19 +58,21 @@
                     │ Duplicates       │
                     │ Balance checks   │
                     └────────┬─────────┘
+                             │
                              ▼
                     ┌──────────────────┐
-                    │   classifier.py  │
+                    │  classifier.py   │
                     │                  │
                     │ Rule-based       │
-                    │       ↓          │
+                    │        ↓         │
                     │ Traditional ML   │
                     └────────┬─────────┘
+                             │
                              ▼
                     ┌──────────────────┐
-                    │   Final Data     │
+                    │    Final Data    │
                     └────────┬─────────┘
-                             ▼
+                             │
                   ┌──────────┴──────────┐
                   ▼                     ▼
             ┌───────────┐         ┌───────────┐
