@@ -1,60 +1,879 @@
+import os
+import tempfile
+from io import BytesIO
+
+import pandas as pd
 import streamlit as st
 
+from src.processor import process_statement
 from dummy_statement_generator import create_random_statement
 
+
+# ============================================================
+# PAGE CONFIGURATION
+# ============================================================
 
 st.set_page_config(
     page_title="Bank Statement Processor",
     page_icon="🏦",
-    layout="wide"
-)
-
-
-st.title("🏦 Bank Statement Processing & Classification System")
-
-st.write(
-    "Upload a bank statement PDF to extract and classify transactions."
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 
 # ============================================================
-# TESTING ONLY - Dummy Statement Generator
+# CUSTOM CSS
 # ============================================================
 
-st.subheader("Testing Tools")
+st.markdown(
+    """
+    <style>
 
-st.caption(
-    "Testing purposes only — generate a synthetic bank statement "
-    "for testing the PDF processing pipeline."
+    /* --------------------------------------------------------
+       Main page
+    -------------------------------------------------------- */
+
+    .main {
+        padding-top: 1rem;
+    }
+
+    .app-title {
+        font-size: 2.25rem;
+        font-weight: 700;
+        margin-bottom: 0.25rem;
+    }
+
+    .app-subtitle {
+        font-size: 1rem;
+        color: #6b7280;
+        margin-bottom: 1.5rem;
+    }
+
+
+    /* --------------------------------------------------------
+       Section headings
+    -------------------------------------------------------- */
+
+    .section-title {
+        font-size: 1.35rem;
+        font-weight: 650;
+        margin-top: 1rem;
+        margin-bottom: 0.8rem;
+    }
+
+
+    /* --------------------------------------------------------
+       Cards
+    -------------------------------------------------------- */
+
+    .info-card {
+        padding: 1rem;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(128, 128, 128, 0.25);
+        margin-bottom: 1rem;
+    }
+
+
+    /* --------------------------------------------------------
+       Footer
+    -------------------------------------------------------- */
+
+    footer {
+        visibility: hidden;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True
 )
 
-if st.button("🧪 Generate Dummy Statement"):
 
-    generated_file = create_random_statement()
+# ============================================================
+# SESSION STATE
+# ============================================================
 
-    st.success("Dummy statement generated successfully.")
+if "processed_df" not in st.session_state:
+    st.session_state.processed_df = None
 
-    st.info(
-        f"Saved to: {generated_file}"
+if "uploaded_filename" not in st.session_state:
+    st.session_state.uploaded_filename = None
+
+
+# ============================================================
+# SIDEBAR - WORKFLOW
+# ============================================================
+
+with st.sidebar:
+
+    st.markdown("## ⚙️ Processing Workflow")
+
+    st.caption(
+        "Complete bank statement processing pipeline"
     )
 
+    workflow_steps = [
+        "📄 Upload Bank Statement",
+        "🔍 Detect PDF Type",
+        "📑 Extract Financial Data",
+        "🔎 Extract Transactions",
+        "✅ Validate Transactions",
+        "🏷️ Classify Transactions",
+        "📊 Display Results",
+        "📥 Export CSV / Excel",
+    ]
+
+    for i, step in enumerate(workflow_steps):
+
+        st.markdown(
+            f"**{i + 1}.** {step}"
+        )
+
+        if i < len(workflow_steps) - 1:
+
+            st.caption("↓")
+
+
+    st.divider()
+
+
+    # --------------------------------------------------------
+    # Classification information
+    # --------------------------------------------------------
+
+    st.markdown("### 🤖 Classification")
+
+    st.caption(
+        "Transactions are classified using "
+        "non-LLM approaches such as heuristic "
+        "rules and traditional machine-learning methods."
+    )
+
+
+    st.divider()
+
+
+    # --------------------------------------------------------
+    # Supported input
+    # --------------------------------------------------------
+
+    st.markdown("### 📄 Supported Input")
+
+    st.markdown(
+        """
+        - Text-based PDFs
+        - Scanned / image PDFs
+        - Multiple bank layouts
+        - CSV export
+        - Excel export
+        """
+    )
+
+
+# ============================================================
+# MAIN HEADER
+# ============================================================
+
+st.markdown(
+    """
+    <div class="app-title">
+        🏦 Bank Statement Processing & Classification System
+    </div>
+
+    <div class="app-subtitle">
+        Extract, validate, classify and analyze transactions
+        from bank statement PDFs.
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+
+# ============================================================
+# UPLOAD SECTION
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">📄 Upload Bank Statement</div>',
+    unsafe_allow_html=True
+)
+
+st.info(
+    "Upload a bank statement PDF. The system automatically detects "
+    "whether it is text-based or image-based and selects the "
+    "appropriate processing pipeline."
+)
+
+
+uploaded_file = st.file_uploader(
+    "Choose a bank statement PDF",
+    type=["pdf"],
+    label_visibility="collapsed",
+    help="Only PDF files are supported."
+)
+
+
+# ============================================================
+# FILE INFORMATION
+# ============================================================
+
+if uploaded_file is not None:
+
+    file_size_kb = uploaded_file.size / 1024
+
+    st.success(
+        f"File uploaded successfully: **{uploaded_file.name}**"
+    )
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+
+        st.metric(
+            "File",
+            uploaded_file.name
+        )
+
+    with col2:
+
+        st.metric(
+            "File Size",
+            f"{file_size_kb:.1f} KB"
+        )
+
+    with col3:
+
+        st.metric(
+            "Format",
+            "PDF"
+        )
+
+
+    st.divider()
+
+
+    # ========================================================
+    # PROCESS BUTTON
+    # ========================================================
+
+    if st.button(
+        "🚀 Process Bank Statement",
+        type="primary",
+        use_container_width=True
+    ):
+
+        temp_path = None
+
+        try:
+
+            # ------------------------------------------------
+            # Save uploaded PDF temporarily
+            # ------------------------------------------------
+
+            with tempfile.NamedTemporaryFile(
+                delete=False,
+                suffix=".pdf"
+            ) as temp_file:
+
+                temp_file.write(
+                    uploaded_file.getbuffer()
+                )
+
+                temp_path = temp_file.name
+
+
+            # ------------------------------------------------
+            # Run processing pipeline
+            # ------------------------------------------------
+
+            with st.spinner(
+                "Processing bank statement..."
+            ):
+
+                transactions_df = process_statement(
+                    temp_path
+                )
+
+
+            # ------------------------------------------------
+            # Validate pipeline output
+            # ------------------------------------------------
+
+            if transactions_df is None:
+
+                st.error(
+                    "The processing pipeline returned no data."
+                )
+
+                st.stop()
+
+
+            if not isinstance(
+                transactions_df,
+                pd.DataFrame
+            ):
+
+                st.error(
+                    "The processing pipeline did not return "
+                    "a pandas DataFrame."
+                )
+
+                st.stop()
+
+
+            if transactions_df.empty:
+
+                st.warning(
+                    "No transactions were extracted "
+                    "from this statement."
+                )
+
+                st.stop()
+
+
+            # ------------------------------------------------
+            # Store result
+            # ------------------------------------------------
+
+            st.session_state.processed_df = transactions_df
+
+            st.session_state.uploaded_filename = (
+                uploaded_file.name
+            )
+
+
+            st.success(
+                f"✅ Processing completed successfully. "
+                f"{len(transactions_df)} transactions extracted."
+            )
+
+
+        except FileNotFoundError as e:
+
+            st.error(
+                f"❌ File error: {e}"
+            )
+
+
+        except ValueError as e:
+
+            st.error(
+                f"❌ Processing error: {e}"
+            )
+
+
+        except Exception as e:
+
+            st.error(
+                "❌ An unexpected error occurred "
+                "while processing the statement."
+            )
+
+            st.exception(e)
+
+
+        finally:
+
+            # ------------------------------------------------
+            # Delete temporary file
+            # ------------------------------------------------
+
+            if temp_path is not None:
+
+                try:
+
+                    if os.path.exists(temp_path):
+
+                        os.remove(temp_path)
+
+                except Exception:
+
+                    pass
+
+
+# ============================================================
+# RESULTS
+# ============================================================
+
+if st.session_state.processed_df is not None:
+
+    transactions_df = st.session_state.processed_df
+
+
+    st.divider()
+
+
+    # ========================================================
+    # RESULTS HEADER
+    # ========================================================
+
+    st.markdown(
+        '<div class="section-title">📊 Processing Results</div>',
+        unsafe_allow_html=True
+    )
+
+    if st.session_state.uploaded_filename:
+
+        st.caption(
+            f"Processed file: "
+            f"**{st.session_state.uploaded_filename}**"
+        )
+
+
+    # ========================================================
+    # FIND CATEGORY COLUMN
+    # ========================================================
+
+    category_column = None
+
+    for column in transactions_df.columns:
+
+        normalized_column = (
+            str(column)
+            .strip()
+            .lower()
+        )
+
+        if normalized_column in [
+            "category",
+            "classification",
+            "transaction_category"
+        ]:
+
+            category_column = column
+
+            break
+
+
+    # ========================================================
+    # SUMMARY METRICS
+    # ========================================================
+
+    total_transactions = len(
+        transactions_df
+    )
+
+    total_columns = len(
+        transactions_df.columns
+    )
+
+
+    if category_column is not None:
+
+        total_categories = (
+            transactions_df[
+                category_column
+            ]
+            .fillna("Uncategorized")
+            .nunique()
+        )
+
+    else:
+
+        total_categories = 0
+
+
+    col1, col2, col3 = st.columns(3)
+
+
+    with col1:
+
+        st.metric(
+            "Transactions",
+            total_transactions
+        )
+
+
+    with col2:
+
+        st.metric(
+            "Categories",
+            total_categories
+        )
+
+
+    with col3:
+
+        st.metric(
+            "Data Columns",
+            total_columns
+        )
+
+
+    st.divider()
+
+
+    # ========================================================
+    # TRANSACTION DATA
+    # ========================================================
+
+    st.markdown(
+        '<div class="section-title">💳 Transaction Data</div>',
+        unsafe_allow_html=True
+    )
+
+    st.caption(
+        "Extracted transaction data displayed directly "
+        "from the processing pipeline."
+    )
+
+
+    st.dataframe(
+        transactions_df,
+        use_container_width=True,
+        hide_index=True,
+        height=500
+    )
+
+
+    # ========================================================
+    # CATEGORY ANALYSIS
+    # ========================================================
+
+    if category_column is not None:
+
+        st.divider()
+
+        st.markdown(
+            '<div class="section-title">'
+            '📈 Category Analysis'
+            '</div>',
+            unsafe_allow_html=True
+        )
+
+
+        # ----------------------------------------------------
+        # Category counts
+        # ----------------------------------------------------
+
+        category_counts = (
+            transactions_df[
+                category_column
+            ]
+            .fillna("Uncategorized")
+            .astype(str)
+            .value_counts()
+        )
+
+
+        total_category_transactions = (
+            category_counts.sum()
+        )
+
+
+        # ----------------------------------------------------
+        # Data for chart
+        # ----------------------------------------------------
+
+        chart_df = (
+            category_counts
+            .reset_index()
+        )
+
+        chart_df.columns = [
+            "Category",
+            "Count"
+        ]
+
+
+        chart_df["Percentage"] = (
+            chart_df["Count"]
+            / total_category_transactions
+            * 100
+        )
+
+
+        # ----------------------------------------------------
+        # Chart + percentage table
+        # ----------------------------------------------------
+
+        chart_col, table_col = st.columns(
+            [1.3, 1]
+        )
+
+
+        # ====================================================
+        # PIE / DONUT CHART
+        # ====================================================
+
+        with chart_col:
+
+            st.markdown(
+                "#### 🥧 Transaction Category Distribution"
+            )
+
+
+            st.vega_lite_chart(
+                chart_df,
+                {
+                    "mark": {
+                        "type": "arc",
+                        "innerRadius": 70,
+                        "tooltip": True
+                    },
+
+                    "encoding": {
+
+                        "theta": {
+                            "field": "Count",
+                            "type": "quantitative"
+                        },
+
+                        "color": {
+                            "field": "Category",
+                            "type": "nominal",
+                            "legend": {
+                                "title": "Category"
+                            }
+                        },
+
+                        "tooltip": [
+
+                            {
+                                "field": "Category",
+                                "type": "nominal",
+                                "title": "Category"
+                            },
+
+                            {
+                                "field": "Count",
+                                "type": "quantitative",
+                                "title": "Transactions"
+                            },
+
+                            {
+                                "field": "Percentage",
+                                "type": "quantitative",
+                                "format": ".1f",
+                                "title": "Percentage"
+                            }
+
+                        ]
+                    },
+
+                    "height": 400
+                },
+
+                use_container_width=True
+            )
+
+
+        # ====================================================
+        # CATEGORY PERCENTAGES
+        # ====================================================
+
+        with table_col:
+
+            st.markdown(
+                "#### 📊 Category Percentages"
+            )
+
+
+            percentage_display = (
+                chart_df[
+                    [
+                        "Category",
+                        "Count",
+                        "Percentage"
+                    ]
+                ]
+                .copy()
+            )
+
+
+            percentage_display["Percentage"] = (
+                percentage_display["Percentage"]
+                .map(
+                    lambda x: f"{x:.1f}%"
+                )
+            )
+
+
+            percentage_display.columns = [
+                "Category",
+                "Transactions",
+                "Percentage"
+            ]
+
+
+            st.dataframe(
+                percentage_display,
+                use_container_width=True,
+                hide_index=True
+            )
+
+
+            st.caption(
+                f"Total classified transactions: "
+                f"{total_category_transactions}"
+            )
+
+
+    else:
+
+        st.info(
+            "No category/classification column was found "
+            "in the processed data."
+        )
+
+
+    # ========================================================
+    # EXPORT SECTION
+    # ========================================================
+
+    st.divider()
+
+    st.markdown(
+        '<div class="section-title">📥 Export Results</div>',
+        unsafe_allow_html=True
+    )
+
+
+    export_col1, export_col2 = st.columns(2)
+
+
+    # ========================================================
+    # CSV EXPORT
+    # ========================================================
+
+    csv_data = (
+        transactions_df
+        .to_csv(index=False)
+        .encode("utf-8")
+    )
+
+
+    with export_col1:
+
+        st.download_button(
+            label="⬇️ Download CSV",
+            data=csv_data,
+            file_name="processed_bank_statement.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+
+
+    # ========================================================
+    # EXCEL EXPORT
+    # ========================================================
+
+    with export_col2:
+
+        try:
+
+            excel_buffer = BytesIO()
+
+
+            with pd.ExcelWriter(
+                excel_buffer,
+                engine="openpyxl"
+            ) as writer:
+
+                # --------------------------------------------
+                # Transactions sheet
+                # --------------------------------------------
+
+                transactions_df.to_excel(
+                    writer,
+                    index=False,
+                    sheet_name="Transactions"
+                )
+
+
+                # --------------------------------------------
+                # Category summary sheet
+                # --------------------------------------------
+
+                if category_column is not None:
+
+                    chart_df[
+                        [
+                            "Category",
+                            "Count",
+                            "Percentage"
+                        ]
+                    ].to_excel(
+                        writer,
+                        index=False,
+                        sheet_name="Category Summary"
+                    )
+
+
+            excel_buffer.seek(0)
+
+
+            st.download_button(
+                label="⬇️ Download Excel",
+                data=excel_buffer,
+                file_name="processed_bank_statement.xlsx",
+                mime=(
+                    "application/vnd.openxmlformats-officedocument."
+                    "spreadsheetml.sheet"
+                ),
+                use_container_width=True
+            )
+
+
+        except Exception as e:
+
+            st.error(
+                f"Excel export failed: {e}"
+            )
+
+
+# ============================================================
+# TESTING TOOLS
+# ============================================================
 
 st.divider()
 
+with st.expander(
+    "🧪 Testing Tools — Generate Dummy Bank Statement"
+):
 
-# ============================================================
-# PDF UPLOAD
-# ============================================================
-
-st.subheader("Upload Bank Statement")
-
-uploaded_file = st.file_uploader(
-    "Upload Bank Statement PDF",
-    type=["pdf"]
-)
-
-if uploaded_file:
-
-    st.success(
-        f"File uploaded: {uploaded_file.name}"
+    st.caption(
+        "This is an optional testing utility. "
+        "Generate a synthetic bank statement and "
+        "then upload the generated PDF using the "
+        "main uploader above."
     )
+
+
+    if st.button(
+        "🧪 Generate Dummy Statement",
+        use_container_width=True
+    ):
+
+        try:
+
+            generated_file = (
+                create_random_statement()
+            )
+
+
+            st.success(
+                "Dummy statement generated successfully."
+            )
+
+
+            st.write(
+                "Generated file:"
+            )
+
+
+            st.code(
+                str(generated_file)
+            )
+
+
+            st.info(
+                "Now upload this PDF using the "
+                "'Upload Bank Statement' section above."
+            )
+
+
+        except Exception as e:
+
+            st.error(
+                f"Failed to generate dummy statement: {e}"
+            )

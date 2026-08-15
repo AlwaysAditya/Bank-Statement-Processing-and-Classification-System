@@ -5,7 +5,7 @@ from src.text_processor import process_text_pdf
 from src.ocr_processor import process_image_pdf
 from src.transaction_extractor import extract_transactions
 from src.validator import validate_transactions
-from src.classifier import classify_transactions
+from src.classifier_engine import hybrid_classify_transactions
 
 
 def process_statement(pdf_path):
@@ -25,7 +25,10 @@ def process_statement(pdf_path):
         ↓
         Validation
         ↓
-        Classification
+        Hybrid Classification
+        ↓
+        Rule-Based → if matched
+        ML → if rule-based cannot classify
         ↓
         Final DataFrame
     """
@@ -132,14 +135,14 @@ def process_statement(pdf_path):
         )
 
     # ========================================================
-    # 6. CLASSIFY
+    # 6. HYBRID CLASSIFICATION
     # ========================================================
 
     print(
         "\nClassifying transactions..."
     )
 
-    transactions_df = classify_transactions(
+    transactions_df = hybrid_classify_transactions(
         transactions_df
     )
 
