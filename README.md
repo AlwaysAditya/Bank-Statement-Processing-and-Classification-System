@@ -416,46 +416,7 @@ Current limitations include:
 
 ---
 
-## 14. Future Improvements
-
-Potential production-level enhancements:
-
-- Bank-specific extraction profiles
-- Better table extraction using PDF coordinates/layout information
-- Improved OCR preprocessing
-- Confidence scores for extracted fields and classifications
-- Human-in-the-loop correction
-- Automatic model retraining from corrected classifications
-- Duplicate transaction detection
-- Balance reconciliation
-- Password-protected PDF support
-- More extensive automated test coverage
-- Logging and monitoring
-- API-based processing service
-- Database-backed processing history
-- Authentication and role-based access control
-
----
-
-## 15. Security & Privacy
-
-This prototype is designed to process bank statements without using an LLM for transaction classification.
-
-For production deployment, additional security controls should be implemented, including:
-
-- Encryption at rest and in transit
-- Secure temporary-file handling
-- PII masking
-- Access control
-- Audit logging
-- Automatic deletion of uploaded documents
-- Secure secrets management
-
-> **Note:** Do not upload real bank statements containing sensitive financial information to the public demo. Use synthetic/test statements instead.
-
----
-
-## 16. Assessment Alignment
+## 14. Assessment Alignment
 
 | Assessment Requirement | Implementation |
 |---|---|
@@ -478,10 +439,10 @@ For production deployment, additional security controls should be implemented, i
 
 ---
 
-## 17. Author
+## 15. Author
 
 **Aditya Salani**
-AI Automation / Data Science Project
+Bank Statement Processing & Classification System Project
 
 Built as a prototype for demonstrating:
 
