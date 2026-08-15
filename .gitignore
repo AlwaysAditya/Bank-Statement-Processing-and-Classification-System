@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Environment variables
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Generated files
+*.log
+*.tmp
+
+# Generated model files
+models/*.pkl
+models/*.joblib
+
+# Generated output
+data/processed/
+data/output/
+
+# Sample/generated PDFs
+data/sample_statements/*.pdf
+
+# OS
+.DS_Store
+Thumbs.db

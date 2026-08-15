@@ -1,0 +1,13 @@
+streamlit
+pandas
+numpy
+PyMuPDF
+pdfplumber
+pytesseract
+opencv-python
+Pillow
+scikit-learn
+openpyxl
+joblib
+python-dateutil
+pytest
