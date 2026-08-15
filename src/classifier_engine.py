@@ -1,232 +1,201 @@
 import pandas as pd
 
-from src.classifier import classify_transactions as rule_classifier
-from src.ml_classifier import predict_transaction
+from src.classifier import classify_transactions
+from src.ml_classifier import (
+    ml_classify_transactions,
+    is_ml_model_available,
+)
 
-
-# ============================================================
-# FIND DESCRIPTION COLUMN
-# ============================================================
-
-def find_description_column(df):
-
-    possible_columns = [
-        "Description",
-        "description",
-        "Transaction Description",
-        "transaction_description",
-        "Narration",
-        "narration",
-        "Details",
-        "details",
-        "Particulars",
-        "particulars",
-    ]
-
-    for column in possible_columns:
-
-        if column in df.columns:
-            return column
-
-    raise ValueError(
-        "Could not find transaction description column. "
-        f"Available columns: {list(df.columns)}"
-    )
-
-
-# ============================================================
-# CHECK WHETHER RULE CLASSIFIER FOUND A CATEGORY
-# ============================================================
-
-def is_valid_rule_category(category):
-
-    if pd.isna(category):
-        return False
-
-    category = str(category).strip().lower()
-
-    invalid_categories = {
-        "",
-        "other",
-        "unknown",
-        "unclassified",
-        "none",
-        "nan",
-    }
-
-    return category not in invalid_categories
-
-
-# ============================================================
-# HYBRID CLASSIFICATION
-# ============================================================
 
 def hybrid_classify_transactions(
-    df,
-    confidence_threshold=0.50
+    transactions_df
 ):
+    """
+    Hybrid transaction classification engine.
 
-    if df is None:
+    Classification priority:
 
+        1. Existing heuristic/rule-based classifier
+        2. Traditional ML classifier
+        3. Uncategorized fallback
+
+    The system does NOT use an LLM.
+    """
+
+    if transactions_df is None:
         raise ValueError(
-            "Input DataFrame cannot be None."
+            "transactions_df cannot be None."
         )
 
-    if df.empty:
+    if not isinstance(
+        transactions_df,
+        pd.DataFrame
+    ):
+        raise TypeError(
+            "transactions_df must be a pandas DataFrame."
+        )
 
-        return df.copy()
+    if transactions_df.empty:
+        return transactions_df
 
-
-    result = df.copy()
-
-
-    # ========================================================
-    # 1. FIND DESCRIPTION COLUMN
-    # ========================================================
-
-    description_column = (
-        find_description_column(result)
-    )
-
+    df = transactions_df.copy()
 
     # ========================================================
-    # 2. RUN EXISTING RULE CLASSIFIER
+    # 1. HEURISTIC CLASSIFICATION
     # ========================================================
 
-    rule_result = rule_classifier(
-        result.copy()
-    )
+    try:
 
+        rule_based_df = classify_transactions(
+            df.copy()
+        )
+
+    except Exception as e:
+
+        print(
+            f"Rule-based classification failed: {e}"
+        )
+
+        rule_based_df = df.copy()
 
     # ========================================================
-    # 3. FIND CATEGORY COLUMN
+    # FIND CATEGORY COLUMN
     # ========================================================
 
     category_column = None
 
-    for column in [
-        "Category",
-        "category",
-        "Transaction Category",
-        "transaction_category",
-    ]:
+    for column in rule_based_df.columns:
 
-        if column in rule_result.columns:
+        normalized = (
+            str(column)
+            .strip()
+            .lower()
+        )
+
+        if normalized in [
+            "category",
+            "classification",
+            "transaction_category",
+        ]:
 
             category_column = column
             break
 
+    # ========================================================
+    # IF RULE-BASED CLASSIFIER DID NOT CREATE CATEGORY
+    # ========================================================
 
     if category_column is None:
 
-        raise ValueError(
-            "Rule classifier did not create a category column."
+        rule_based_df["Category"] = (
+            "Uncategorized"
         )
 
+        category_column = "Category"
 
     # ========================================================
-    # 4. CLASSIFY EACH TRANSACTION
+    # 2. TRADITIONAL ML CLASSIFICATION
     # ========================================================
 
-    final_categories = []
+    if is_ml_model_available():
 
-    classification_methods = []
+        try:
 
-    classification_confidences = []
+            ml_df = ml_classify_transactions(
+                rule_based_df.copy()
+            )
 
+            if (
+                isinstance(
+                    ml_df,
+                    pd.DataFrame
+                )
+                and
+                not ml_df.empty
+            ):
 
-    for index, description in enumerate(
-        result[description_column]
-    ):
+                # ------------------------------------------------
+                # Prefer ML result only where rule classifier
+                # produced Uncategorized.
+                # ------------------------------------------------
 
-        rule_category = (
-            rule_result.iloc[index][
-                category_column
-            ]
+                ml_category_column = None
+
+                for column in ml_df.columns:
+
+                    normalized = (
+                        str(column)
+                        .strip()
+                        .lower()
+                    )
+
+                    if normalized in [
+                        "ml_category",
+                        "predicted_category",
+                        "ml_classification",
+                    ]:
+
+                        ml_category_column = column
+                        break
+
+                if ml_category_column is not None:
+
+                    mask = (
+                        rule_based_df[
+                            category_column
+                        ]
+                        .fillna("")
+                        .astype(str)
+                        .str.strip()
+                        .str.lower()
+                        .isin([
+                            "",
+                            "uncategorized",
+                            "unknown",
+                            "other",
+                        ])
+                    )
+
+                    rule_based_df.loc[
+                        mask,
+                        category_column
+                    ] = (
+                        ml_df.loc[
+                            mask,
+                            ml_category_column
+                        ]
+                        .values
+                    )
+
+        except Exception as e:
+
+            print(
+                f"ML classification skipped: {e}"
+            )
+
+    # ========================================================
+    # 3. FINAL FALLBACK
+    # ========================================================
+
+    rule_based_df[
+        category_column
+    ] = (
+        rule_based_df[
+            category_column
+        ]
+        .fillna("Uncategorized")
+        .replace(
+            "",
+            "Uncategorized"
         )
-
-
-        # ====================================================
-        # RULE-BASED CLASSIFICATION
-        # ====================================================
-
-        if is_valid_rule_category(
-            rule_category
-        ):
-
-            final_categories.append(
-                rule_category
-            )
-
-            classification_methods.append(
-                "Rule-Based"
-            )
-
-            classification_confidences.append(
-                1.0
-            )
-
-            continue
-
-
-        # ====================================================
-        # ML CLASSIFICATION
-        # ====================================================
-
-        ml_category, ml_confidence = (
-            predict_transaction(
-                description,
-                confidence_threshold
-            )
-        )
-
-
-        if ml_category != "Other":
-
-            final_categories.append(
-                ml_category
-            )
-
-            classification_methods.append(
-                "TF-IDF + Logistic Regression"
-            )
-
-            classification_confidences.append(
-                ml_confidence
-            )
-
-        else:
-
-            final_categories.append(
-                "Other"
-            )
-
-            classification_methods.append(
-                "Unclassified"
-            )
-
-            classification_confidences.append(
-                ml_confidence
-            )
-
-
-    # ========================================================
-    # 5. ADD RESULTS
-    # ========================================================
-
-    result["Category"] = final_categories
-
-    result["Classification Method"] = (
-        classification_methods
     )
 
-    result["Classification Confidence"] = [
-        round(
-            confidence * 100,
-            2
-        )
-        for confidence in classification_confidences
-    ]
+    # ========================================================
+    # 4. CLASSIFICATION METHOD
+    # ========================================================
 
+    rule_based_df[
+        "Classification Method"
+    ] = "Heuristic / Rule-Based"
 
-    return result
+    return rule_based_df

@@ -1,7 +1,9 @@
 import os
 import tempfile
 from io import BytesIO
+import re
 
+import fitz
 import pandas as pd
 import streamlit as st
 
@@ -17,7 +19,7 @@ st.set_page_config(
     page_title="Bank Statement Processor",
     page_icon="🏦",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
 
@@ -30,7 +32,7 @@ st.markdown(
     <style>
 
     /* ========================================================
-       MAIN PAGE
+       MAIN APP
        ======================================================== */
 
     .main {
@@ -38,21 +40,16 @@ st.markdown(
     }
 
     .app-title {
-        font-size: 2.25rem;
+        font-size: 2.2rem;
         font-weight: 700;
-        margin-bottom: 0.25rem;
+        margin-bottom: 0.2rem;
     }
 
     .app-subtitle {
-        font-size: 1rem;
         color: #6b7280;
+        font-size: 1rem;
         margin-bottom: 1.5rem;
     }
-
-
-    /* ========================================================
-       SECTION HEADINGS
-       ======================================================== */
 
     .section-title {
         font-size: 1.35rem;
@@ -63,34 +60,96 @@ st.markdown(
 
 
     /* ========================================================
-       WORKFLOW
+       DARK SIDEBAR
        ======================================================== */
 
-    .workflow-step {
-        padding: 0.55rem 0.7rem;
-        margin-bottom: 0.2rem;
-        border-radius: 0.5rem;
-        background-color: rgba(128, 128, 128, 0.08);
-        border: 1px solid rgba(128, 128, 128, 0.15);
+    section[data-testid="stSidebar"] {
+        background-color: #111827 !important;
     }
 
-    .workflow-arrow {
-        text-align: center;
-        font-size: 1rem;
-        color: #6b7280;
-        margin: 0.1rem 0;
+    section[data-testid="stSidebar"] > div {
+        background-color: #111827 !important;
+    }
+
+    section[data-testid="stSidebar"] * {
+        color: #f9fafb !important;
+    }
+
+    section[data-testid="stSidebar"] p {
+        color: #f9fafb !important;
+    }
+
+    section[data-testid="stSidebar"] span {
+        color: #f9fafb !important;
+    }
+
+    section[data-testid="stSidebar"] label {
+        color: #f9fafb !important;
+    }
+
+    section[data-testid="stSidebar"] hr {
+        border-color: #374151 !important;
+    }
+
+    section[data-testid="stSidebar"] .stCaption {
+        color: #d1d5db !important;
+    }
+
+    section[data-testid="stSidebar"] button {
+        background-color: #1f2937 !important;
+        color: #f9fafb !important;
+        border: 1px solid #374151 !important;
+    }
+
+    section[data-testid="stSidebar"] button:hover {
+        background-color: #374151 !important;
+        color: white !important;
+        border-color: #6b7280 !important;
     }
 
 
     /* ========================================================
-       INFO CARDS
+       WORKFLOW
        ======================================================== */
 
-    .info-card {
-        padding: 1rem;
-        border-radius: 0.75rem;
-        border: 1px solid rgba(128, 128, 128, 0.25);
-        margin-bottom: 1rem;
+    .workflow-box {
+        background-color: #1f2937 !important;
+        border: 1px solid #374151 !important;
+        border-radius: 10px;
+        padding: 11px 12px;
+        margin-bottom: 7px;
+    }
+
+    .workflow-number {
+        color: #93c5fd !important;
+        font-weight: 700;
+    }
+
+    .workflow-text {
+        color: #f9fafb !important;
+        font-weight: 500;
+    }
+
+    .workflow-arrow {
+        text-align: center;
+        color: #9ca3af !important;
+        font-size: 18px;
+        margin: 1px 0;
+    }
+
+
+    /* ========================================================
+       ACCOUNT INFORMATION
+       ======================================================== */
+
+    .account-value-box {
+        padding: 10px 14px;
+        border-radius: 8px;
+        border: 1px solid #d1d5db;
+        background-color: #f9fafb;
+        color: #111827;
+        font-weight: 600;
+        min-height: 42px;
     }
 
 
@@ -104,7 +163,7 @@ st.markdown(
 
     </style>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 
@@ -112,83 +171,499 @@ st.markdown(
 # SESSION STATE
 # ============================================================
 
-if "account_details" not in st.session_state:
-
-    st.session_state.account_details = None
-
 if "processed_df" not in st.session_state:
     st.session_state.processed_df = None
+
+if "account_details" not in st.session_state:
+    st.session_state.account_details = {}
 
 if "uploaded_filename" not in st.session_state:
     st.session_state.uploaded_filename = None
 
-if "uploader_key" not in st.session_state:
-    st.session_state.uploader_key = 0
-
-if "generated_file" not in st.session_state:
-    st.session_state.generated_file = None
+if "processing_complete" not in st.session_state:
+    st.session_state.processing_complete = False
 
 
 # ============================================================
-# CALLBACKS
+# CLEAR APPLICATION
 # ============================================================
 
-def clear_content():
-
-    generated_file = (
-        st.session_state.get(
-            "generated_file"
-        )
-    )
-
-    if generated_file:
-
-        try:
-
-            if os.path.exists(
-                generated_file
-            ):
-
-                os.remove(
-                    generated_file
-                )
-
-        except Exception:
-
-            pass
-
+def clear_application():
 
     st.session_state.processed_df = None
-
-    st.session_state.account_details = None
-
+    st.session_state.account_details = {}
     st.session_state.uploaded_filename = None
-
-    st.session_state.generated_file = None
-
-    st.session_state.uploader_key += 1
+    st.session_state.processing_complete = False
 
 
-def csv_download_notice():
+# ============================================================
+# ACCOUNT DETAILS EXTRACTION
+# ============================================================
+
+def extract_account_details(pdf_path):
     """
-    Show confirmation after CSV download button is clicked.
+    Extract account-level information directly from the PDF.
+
+    Expected fields:
+
+        Bank Name
+        Customer
+        Account Number
+        IFSC Code
+        Branch / City
+        Statement Period
+
+    This is intentionally independent from process_statement().
     """
 
-    st.toast(
-        "✅ CSV file is downloaded!",
-        icon="📥"
+    details = {
+        "account_holder": "Not detected",
+        "account_number": "Not detected",
+        "bank_name": "Not detected",
+        "ifsc": "Not detected",
+        "branch": "Not detected",
+        "statement_period": "Not detected",
+    }
+
+    try:
+
+        document = fitz.open(pdf_path)
+
+        pages_text = []
+
+        for page in document:
+
+            text = page.get_text("text")
+
+            if text:
+                pages_text.append(text)
+
+        document.close()
+
+        full_text = "\n".join(pages_text)
+
+        if not full_text.strip():
+            return details
+
+        text = full_text.replace("\r", "\n")
+
+        lines = [
+            line.strip()
+            for line in text.split("\n")
+            if line.strip()
+        ]
+
+
+        # ====================================================
+        # GENERIC LABEL/VALUE EXTRACTOR
+        # ====================================================
+
+        def get_value_from_lines(labels):
+
+            for i, line in enumerate(lines):
+
+                clean_line = line.strip()
+                lower_line = clean_line.lower()
+
+                for label in labels:
+
+                    label_lower = label.lower()
+
+                    # ----------------------------------------
+                    # Label: Value
+                    # ----------------------------------------
+
+                    if lower_line.startswith(
+                        label_lower + ":"
+                    ):
+
+                        value = clean_line[
+                            len(label) + 1:
+                        ].strip()
+
+                        if value:
+                            return value
+
+
+                    # ----------------------------------------
+                    # Label - Value
+                    # ----------------------------------------
+
+                    if lower_line.startswith(
+                        label_lower + " -"
+                    ):
+
+                        value = clean_line[
+                            len(label) + 2:
+                        ].strip()
+
+                        if value:
+                            return value
+
+
+                    # ----------------------------------------
+                    # Label on one line
+                    # Value on next line
+                    # ----------------------------------------
+
+                    if lower_line == label_lower:
+
+                        if i + 1 < len(lines):
+
+                            next_line = (
+                                lines[i + 1].strip()
+                            )
+
+                            if next_line:
+
+                                return next_line
+
+            return None
+
+
+        # ====================================================
+        # ACCOUNT HOLDER
+        # ====================================================
+
+        holder = get_value_from_lines([
+            "Customer",
+            "Customer Name",
+            "Account Holder",
+            "Account Holder Name",
+        ])
+
+        if holder:
+
+            details["account_holder"] = holder
+
+
+        # ====================================================
+        # ACCOUNT NUMBER
+        # ====================================================
+
+        account_number = get_value_from_lines([
+            "Account Number",
+            "Account No",
+            "Account No.",
+            "A/C Number",
+            "A/C No",
+            "A/C No.",
+        ])
+
+        if account_number:
+
+            account_number = re.sub(
+                r"[^A-Za-z0-9]",
+                "",
+                account_number,
+            )
+
+            details["account_number"] = (
+                account_number
+            )
+
+
+        # ====================================================
+        # IFSC
+        # ====================================================
+
+        ifsc_match = re.search(
+            r"\b[A-Z]{4}0[A-Z0-9]{6}\b",
+            text.upper(),
+        )
+
+        if ifsc_match:
+
+            details["ifsc"] = (
+                ifsc_match.group(0)
+            )
+
+
+        # ====================================================
+        # BANK NAME
+        # ====================================================
+
+        bank = get_value_from_lines([
+            "Bank Name",
+        ])
+
+        if bank:
+
+            invalid_bank_values = {
+                "account statement",
+                "statement",
+                "account",
+                "customer",
+                "customer name",
+                "name",
+                "not detected",
+            }
+
+            if bank.strip().lower() not in (
+                invalid_bank_values
+            ):
+
+                details["bank_name"] = (
+                    bank.strip()
+                )
+
+
+        # ====================================================
+        # FALLBACK BANK DETECTION
+        # ====================================================
+
+        if details["bank_name"] == "Not detected":
+
+            known_banks = [
+                "HDFC Bank",
+                "ICICI Bank",
+                "State Bank of India",
+                "Axis Bank",
+                "Kotak Mahindra Bank",
+                "IndusInd Bank",
+                "Yes Bank",
+                "IDFC FIRST Bank",
+                "Federal Bank",
+                "Bank of Baroda",
+                "Punjab National Bank",
+                "Canara Bank",
+                "Union Bank of India",
+                "Bank of India",
+                "Indian Bank",
+                "AU Small Finance Bank",
+                "RBL Bank",
+                "South Indian Bank",
+                "IDBI Bank",
+                "Bandhan Bank",
+            ]
+
+            text_lower = text.lower()
+
+            for bank_name in known_banks:
+
+                if bank_name.lower() in text_lower:
+
+                    details["bank_name"] = (
+                        bank_name
+                    )
+
+                    break
+
+
+        # ====================================================
+        # BRANCH
+        # ====================================================
+
+        branch = get_value_from_lines([
+            "Branch",
+            "Branch Name",
+            "Branch / City",
+        ])
+
+        if branch:
+
+            details["branch"] = (
+                branch.strip()
+            )
+
+
+        # ====================================================
+        # STATEMENT PERIOD
+        # ====================================================
+
+        period = get_value_from_lines([
+            "Statement Period",
+            "Period",
+        ])
+
+        if period:
+
+            details["statement_period"] = (
+                period.strip()
+            )
+
+
+        # ====================================================
+        # FALLBACK STATEMENT PERIOD
+        # ====================================================
+
+        if (
+            details["statement_period"]
+            == "Not detected"
+        ):
+
+            period_match = re.search(
+                r"(\d{2}/\d{2}/\d{4})"
+                r"\s*(?:to|-)\s*"
+                r"(\d{2}/\d{2}/\d{4})",
+                text,
+            )
+
+            if period_match:
+
+                details["statement_period"] = (
+                    f"{period_match.group(1)} "
+                    f"to "
+                    f"{period_match.group(2)}"
+                )
+
+
+        return details
+
+    except Exception as e:
+
+        print(
+            f"Account detail extraction error: {e}"
+        )
+
+        return details
+
+
+# ============================================================
+# FIND DATAFRAME
+# ============================================================
+
+def find_dataframe(obj):
+
+    if isinstance(obj, pd.DataFrame):
+
+        return obj
+
+
+    if isinstance(obj, dict):
+
+        preferred_keys = [
+            "transactions",
+            "transaction_df",
+            "processed_df",
+            "data",
+            "df",
+            "result",
+        ]
+
+        for key in preferred_keys:
+
+            if key in obj:
+
+                found = find_dataframe(
+                    obj[key]
+                )
+
+                if found is not None:
+
+                    return found
+
+
+        for value in obj.values():
+
+            found = find_dataframe(value)
+
+            if found is not None:
+
+                return found
+
+
+    if isinstance(obj, (tuple, list)):
+
+        for item in obj:
+
+            found = find_dataframe(item)
+
+            if found is not None:
+
+                return found
+
+
+    return None
+
+
+# ============================================================
+# CATEGORY COLUMN
+# ============================================================
+
+def get_category_column(df):
+
+    possible_columns = [
+        "category",
+        "classification",
+        "transaction_category",
+        "predicted_category",
+        "class",
+    ]
+
+    for column in df.columns:
+
+        normalized = (
+            str(column)
+            .strip()
+            .lower()
+            .replace(" ", "_")
+        )
+
+        if normalized in possible_columns:
+
+            return column
+
+    return None
+
+
+# ============================================================
+# SAFE DISPLAY VALUE
+# ============================================================
+
+def safe_value(value):
+
+    if value is None:
+
+        return "Not detected"
+
+    try:
+
+        if pd.isna(value):
+
+            return "Not detected"
+
+    except Exception:
+
+        pass
+
+    value = str(value).strip()
+
+    if not value:
+
+        return "Not detected"
+
+    return value
+
+
+# ============================================================
+# HIDE INTERNAL COLUMNS
+# ============================================================
+
+def get_display_dataframe(df):
+    """
+    Create a copy of the processed DataFrame for display
+    and export.
+
+    Internal processing columns are NOT removed from the
+    original DataFrame.
+
+    Currently hidden:
+        Classification Method
+    """
+
+    display_df = df.copy()
+
+    columns_to_hide = [
+        "Classification Method",
+    ]
+
+    display_df = display_df.drop(
+        columns=columns_to_hide,
+        errors="ignore",
     )
 
-
-def excel_download_notice():
-    """
-    Show confirmation after Excel download button is clicked.
-    """
-
-    st.toast(
-        "✅ Excel file is downloaded!",
-        icon="📥"
-    )
+    return display_df
 
 
 # ============================================================
@@ -197,93 +672,75 @@ def excel_download_notice():
 
 with st.sidebar:
 
-    st.markdown("## ⚙️ Processing Workflow")
+    st.markdown(
+        "## ⚙️ Processing Workflow"
+    )
 
     st.caption(
         "Bank statement processing pipeline"
     )
 
-    # ========================================================
-    # WORKFLOW
-    # ========================================================
 
     workflow_steps = [
-
-        "📄 Upload Bank Statement",
-
-        "🔍 Detect PDF Type",
-
-        "📑 Extract Financial Data",
-
-        "🔎 Extract Transactions",
-
-        "✅ Validate Transactions",
-
-        "🏷️ Rule-Based Classification",
-
-        "🤖 ML Classification Fallback",
-
-        "📊 Display Results",
-
-        "📥 Export CSV / Excel",
+        ("📄", "Upload Bank Statement"),
+        ("🔍", "Detect PDF Type"),
+        ("📑", "Extract Financial Data"),
+        ("🔎", "Extract Transactions"),
+        ("✅", "Validate Transactions"),
+        ("🏷️", "Classify Transactions"),
+        ("📊", "Display Results"),
+        ("📥", "Export CSV / Excel"),
     ]
 
 
-    for i, step in enumerate(workflow_steps):
+    for index, (icon, text) in enumerate(
+        workflow_steps
+    ):
 
         st.markdown(
             f"""
-            <div class="workflow-step">
-                <strong>{i + 1}.</strong> {step}
+            <div class="workflow-box">
+                <span class="workflow-number">
+                    {index + 1}.
+                </span>
+                &nbsp;
+                <span class="workflow-text">
+                    {icon} {text}
+                </span>
             </div>
             """,
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
 
-        if i < len(workflow_steps) - 1:
+
+        if index < len(workflow_steps) - 1:
 
             st.markdown(
                 '<div class="workflow-arrow">↓</div>',
-                unsafe_allow_html=True
+                unsafe_allow_html=True,
             )
 
 
     st.divider()
 
 
-    # ========================================================
-    # CLASSIFICATION
-    # ========================================================
-
-    st.markdown("### 🤖 Classification Engine")
-
     st.markdown(
-        """
-        **1. Rule-Based**
+        "### 🤖 Classification"
+    )
 
-        Existing heuristic keyword matching.
-
-        **2. Traditional ML**
-
-        TF-IDF + Logistic Regression.
-
-        **3. Hybrid**
-
-        Rules are checked first.  
-        ML handles transactions that
-        rules cannot confidently classify.
-        """
+    st.caption(
+        "Transactions are classified using "
+        "heuristic rules and traditional "
+        "machine-learning methods."
     )
 
 
     st.divider()
 
 
-    # ========================================================
-    # SUPPORTED INPUT
-    # ========================================================
-
-    st.markdown("### 📄 Supported Input")
+    st.markdown(
+        "### 📄 Supported Input"
+    )
 
     st.markdown(
         """
@@ -291,7 +748,7 @@ with st.sidebar:
         - Scanned / image PDFs
         - Multiple bank layouts
         - Transaction extraction
-        - Non-LLM classification
+        - Transaction classification
         - CSV export
         - Excel export
         """
@@ -301,21 +758,19 @@ with st.sidebar:
     st.divider()
 
 
-    # ========================================================
-    # CLEAR CONTENT
-    # ========================================================
-
-    st.markdown("### 🧹 Session Controls")
-
-    st.caption(
-        "Clear the currently uploaded and processed content."
+    st.markdown(
+        "### 🧹 Application"
     )
 
-    st.button(
+
+    if st.button(
         "🗑️ Clear Content",
         use_container_width=True,
-        on_click=clear_content
-    )
+    ):
+
+        clear_application()
+
+        st.rerun()
 
 
 # ============================================================
@@ -330,10 +785,10 @@ st.markdown(
 
     <div class="app-subtitle">
         Extract, validate, classify and analyze transactions
-        from bank statement PDFs using non-LLM approaches.
+        from bank statement PDFs.
     </div>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 
@@ -342,14 +797,16 @@ st.markdown(
 # ============================================================
 
 st.markdown(
-    '<div class="section-title">📄 Upload Bank Statement</div>',
-    unsafe_allow_html=True
+    '<div class="section-title">'
+    '📄 Upload Bank Statement'
+    '</div>',
+    unsafe_allow_html=True,
 )
+
 
 st.info(
     "Upload a bank statement PDF. The system automatically "
-    "detects whether it is text-based or image-based and "
-    "selects the appropriate processing pipeline."
+    "detects whether it is text-based or image-based."
 )
 
 
@@ -357,44 +814,50 @@ uploaded_file = st.file_uploader(
     "Choose a bank statement PDF",
     type=["pdf"],
     label_visibility="collapsed",
-    help="Only PDF files are supported.",
-    key=f"bank_statement_uploader_{st.session_state.uploader_key}"
 )
 
 
 # ============================================================
-# FILE INFORMATION
+# FILE INFORMATION + PROCESS
 # ============================================================
 
 if uploaded_file is not None:
 
-    file_size_kb = uploaded_file.size / 1024
-
-    st.success(
-        f"File uploaded successfully: **{uploaded_file.name}**"
+    file_size_kb = (
+        uploaded_file.size / 1024
     )
 
+
+    st.success(
+        f"File uploaded successfully: "
+        f"**{uploaded_file.name}**"
+    )
+
+
     col1, col2, col3 = st.columns(3)
+
 
     with col1:
 
         st.metric(
             "File",
-            uploaded_file.name
+            uploaded_file.name,
         )
+
 
     with col2:
 
         st.metric(
             "File Size",
-            f"{file_size_kb:.1f} KB"
+            f"{file_size_kb:.1f} KB",
         )
+
 
     with col3:
 
         st.metric(
             "Format",
-            "PDF"
+            "PDF",
         )
 
 
@@ -408,20 +871,21 @@ if uploaded_file is not None:
     if st.button(
         "🚀 Process Bank Statement",
         type="primary",
-        use_container_width=True
+        use_container_width=True,
     ):
 
         temp_path = None
 
+
         try:
 
             # ------------------------------------------------
-            # Save uploaded PDF temporarily
+            # Save uploaded file
             # ------------------------------------------------
 
             with tempfile.NamedTemporaryFile(
                 delete=False,
-                suffix=".pdf"
+                suffix=".pdf",
             ) as temp_file:
 
                 temp_file.write(
@@ -432,6 +896,17 @@ if uploaded_file is not None:
 
 
             # ------------------------------------------------
+            # Extract account details
+            # ------------------------------------------------
+
+            account_details = (
+                extract_account_details(
+                    temp_path
+                )
+            )
+
+
+            # ------------------------------------------------
             # Run processing pipeline
             # ------------------------------------------------
 
@@ -439,35 +914,38 @@ if uploaded_file is not None:
                 "Processing bank statement..."
             ):
 
-                transactions_df = process_statement(
+                result = process_statement(
                     temp_path
                 )
 
 
             # ------------------------------------------------
-            # Validate output
+            # Find transaction DataFrame
             # ------------------------------------------------
+
+            transactions_df = (
+                find_dataframe(result)
+            )
+
 
             if transactions_df is None:
 
                 st.error(
-                    "The processing pipeline returned no data."
+                    "The processing pipeline did not "
+                    "return transaction data."
+                )
+
+                st.write(
+                    "Returned object type:",
+                    type(result).__name__,
                 )
 
                 st.stop()
 
 
-            if not isinstance(
-                transactions_df,
-                pd.DataFrame
-            ):
-
-                st.error(
-                    "The processing pipeline did not return "
-                    "a pandas DataFrame."
-                )
-
-                st.stop()
+            transactions_df = (
+                transactions_df.copy()
+            )
 
 
             if transactions_df.empty:
@@ -481,15 +959,23 @@ if uploaded_file is not None:
 
 
             # ------------------------------------------------
-            # Store result
+            # Save session state
             # ------------------------------------------------
 
             st.session_state.processed_df = (
                 transactions_df
             )
 
+            st.session_state.account_details = (
+                account_details
+            )
+
             st.session_state.uploaded_filename = (
                 uploaded_file.name
+            )
+
+            st.session_state.processing_complete = (
+                True
             )
 
 
@@ -541,157 +1027,6 @@ if uploaded_file is not None:
 
                     pass
 
-# ============================================================
-# ACCOUNT INFORMATION
-# ============================================================
-
-if st.session_state.get("account_details"):
-
-    account_details = (
-        st.session_state.account_details
-    )
-
-    st.divider()
-
-    st.markdown(
-        '<div class="section-title">'
-        '👤 Account Information'
-        '</div>',
-        unsafe_allow_html=True
-    )
-
-    st.caption(
-        "Account information extracted from the bank statement."
-    )
-
-
-    # --------------------------------------------------------
-    # Account number masking
-    # --------------------------------------------------------
-
-    account_number = (
-        account_details.get(
-            "account_number"
-        )
-    )
-
-
-    if account_number:
-
-        account_number = str(
-            account_number
-        )
-
-        if len(account_number) > 4:
-
-            masked_account_number = (
-                "X" * (
-                    len(account_number) - 4
-                )
-                + account_number[-4:]
-            )
-
-        else:
-
-            masked_account_number = (
-                account_number
-            )
-
-    else:
-
-        masked_account_number = "Not detected"
-
-
-    # --------------------------------------------------------
-    # Values
-    # --------------------------------------------------------
-
-    bank_name = (
-        account_details.get(
-            "bank_name"
-        )
-        or "Not detected"
-    )
-
-    account_holder = (
-        account_details.get(
-            "account_holder_name"
-        )
-        or "Not detected"
-    )
-
-    ifsc = (
-        account_details.get(
-            "ifsc"
-        )
-        or "Not detected"
-    )
-
-    branch = (
-        account_details.get(
-            "branch"
-        )
-        or "Not detected"
-    )
-
-    statement_period = (
-        account_details.get(
-            "statement_period"
-        )
-        or "Not detected"
-    )
-
-
-    # --------------------------------------------------------
-    # Display
-    # --------------------------------------------------------
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-
-        st.metric(
-            "Account Holder",
-            account_holder
-        )
-
-    with col2:
-
-        st.metric(
-            "Account Number",
-            masked_account_number
-        )
-
-    with col3:
-
-        st.metric(
-            "Bank",
-            bank_name
-        )
-
-
-    col4, col5, col6 = st.columns(3)
-
-    with col4:
-
-        st.metric(
-            "IFSC",
-            ifsc
-        )
-
-    with col5:
-
-        st.metric(
-            "Branch",
-            branch
-        )
-
-    with col6:
-
-        st.metric(
-            "Statement Period",
-            statement_period
-        )
 
 # ============================================================
 # RESULTS
@@ -707,13 +1042,11 @@ if st.session_state.processed_df is not None:
     st.divider()
 
 
-    # ========================================================
-    # RESULTS HEADER
-    # ========================================================
-
     st.markdown(
-        '<div class="section-title">📊 Processing Results</div>',
-        unsafe_allow_html=True
+        '<div class="section-title">'
+        '📊 Processing Results'
+        '</div>',
+        unsafe_allow_html=True,
     )
 
 
@@ -726,97 +1059,168 @@ if st.session_state.processed_df is not None:
 
 
     # ========================================================
-    # FIND CATEGORY COLUMN
+    # ACCOUNT HOLDER DETAILS
     # ========================================================
 
-    category_column = None
-
-    for column in transactions_df.columns:
-
-        normalized_column = (
-            str(column)
-            .strip()
-            .lower()
-        )
-
-        if normalized_column in [
-            "category",
-            "classification",
-            "transaction_category"
-        ]:
-
-            category_column = column
-
-            break
-
-
-    # ========================================================
-    # FIND CLASSIFICATION METHOD
-    # ========================================================
-
-    method_column = None
-
-    for column in transactions_df.columns:
-
-        normalized_column = (
-            str(column)
-            .strip()
-            .lower()
-        )
-
-        if normalized_column == (
-            "classification method"
-        ):
-
-            method_column = column
-
-            break
-
-
-    # ========================================================
-    # FIND CONFIDENCE COLUMN
-    # ========================================================
-
-    confidence_column = None
-
-    for column in transactions_df.columns:
-
-        normalized_column = (
-            str(column)
-            .strip()
-            .lower()
-        )
-
-        if normalized_column in [
-            "classification confidence",
-            "confidence"
-        ]:
-
-            confidence_column = column
-
-            break
-
-
-    # ========================================================
-    # SUMMARY METRICS
-    # ========================================================
-
-    total_transactions = len(
-        transactions_df
-    )
-
-    total_columns = len(
-        transactions_df.columns
+    st.markdown(
+        '<div class="section-title">'
+        '👤 Account Holder Details'
+        '</div>',
+        unsafe_allow_html=True,
     )
 
 
-    if category_column is not None:
+    details = (
+        st.session_state.account_details
+    )
+
+
+    # ========================================================
+    # ACCOUNT DETAILS ROW 1
+    # ========================================================
+
+    col1, col2, col3 = st.columns(3)
+
+
+    with col1:
+
+        st.markdown(
+            "#### 👤 Account Holder"
+        )
+
+        st.info(
+            safe_value(
+                details.get(
+                    "account_holder",
+                    "Not detected",
+                )
+            )
+        )
+
+
+    with col2:
+
+        st.markdown(
+            "#### 🔢 Account Number"
+        )
+
+        st.info(
+            safe_value(
+                details.get(
+                    "account_number",
+                    "Not detected",
+                )
+            )
+        )
+
+
+    with col3:
+
+        st.markdown(
+            "#### 🏦 Bank Name"
+        )
+
+        st.info(
+            safe_value(
+                details.get(
+                    "bank_name",
+                    "Not detected",
+                )
+            )
+        )
+
+
+    # ========================================================
+    # ACCOUNT DETAILS ROW 2
+    # ========================================================
+
+    col1, col2, col3 = st.columns(3)
+
+
+    with col1:
+
+        st.markdown(
+            "#### 🏛️ IFSC Code"
+        )
+
+        st.info(
+            safe_value(
+                details.get(
+                    "ifsc",
+                    "Not detected",
+                )
+            )
+        )
+
+
+    with col2:
+
+        st.markdown(
+            "#### 📍 Branch"
+        )
+
+        st.info(
+            safe_value(
+                details.get(
+                    "branch",
+                    "Not detected",
+                )
+            )
+        )
+
+
+    with col3:
+
+        st.markdown(
+            "#### 📅 Statement Period"
+        )
+
+        st.info(
+            safe_value(
+                details.get(
+                    "statement_period",
+                    "Not detected",
+                )
+            )
+        )
+
+
+    # ========================================================
+    # TRANSACTION SUMMARY
+    # ========================================================
+
+    st.divider()
+
+
+    category_column = (
+        get_category_column(
+            transactions_df
+        )
+    )
+
+
+    total_transactions = (
+        len(transactions_df)
+    )
+
+
+    total_columns = (
+        len(
+            get_display_dataframe(
+                transactions_df
+            ).columns
+        )
+    )
+
+
+    if category_column:
 
         total_categories = (
             transactions_df[
                 category_column
             ]
             .fillna("Uncategorized")
+            .astype(str)
             .nunique()
         )
 
@@ -832,7 +1236,7 @@ if st.session_state.processed_df is not None:
 
         st.metric(
             "Transactions",
-            total_transactions
+            total_transactions,
         )
 
 
@@ -840,7 +1244,7 @@ if st.session_state.processed_df is not None:
 
         st.metric(
             "Categories",
-            total_categories
+            total_categories,
         )
 
 
@@ -848,86 +1252,44 @@ if st.session_state.processed_df is not None:
 
         st.metric(
             "Data Columns",
-            total_columns
+            total_columns,
         )
 
 
     # ========================================================
-    # CLASSIFICATION SUMMARY
+    # TRANSACTION TABLE
     # ========================================================
-
-    if method_column is not None:
-
-        st.divider()
-
-        st.markdown(
-            "### 🤖 Classification Summary"
-        )
-
-        method_counts = (
-            transactions_df[
-                method_column
-            ]
-            .fillna("Unknown")
-            .astype(str)
-            .value_counts()
-        )
-
-
-        summary_col1, summary_col2 = (
-            st.columns(2)
-        )
-
-
-        with summary_col1:
-
-            rule_count = method_counts.get(
-                "Rule-Based",
-                0
-            )
-
-            st.metric(
-                "Rule-Based",
-                int(rule_count)
-            )
-
-
-        with summary_col2:
-
-            ml_count = method_counts.get(
-                "TF-IDF + Logistic Regression",
-                0
-            )
-
-            st.metric(
-                "ML Classified",
-                int(ml_count)
-            )
-
 
     st.divider()
 
 
-    # ========================================================
-    # TRANSACTION DATA
-    # ========================================================
-
     st.markdown(
-        '<div class="section-title">💳 Transaction Data</div>',
-        unsafe_allow_html=True
+        '<div class="section-title">'
+        '💳 Transaction Data'
+        '</div>',
+        unsafe_allow_html=True,
     )
 
+
     st.caption(
-        "Extracted and classified transaction data "
-        "from the processing pipeline."
+        "Extracted and classified transaction data."
+    )
+
+
+    # --------------------------------------------------------
+    # HIDE INTERNAL CLASSIFICATION METHOD COLUMN
+    # --------------------------------------------------------
+
+    display_df = get_display_dataframe(
+        transactions_df
     )
 
 
     st.dataframe(
-        transactions_df,
+        display_df,
         use_container_width=True,
         hide_index=True,
-        height=500
+        height=500,
     )
 
 
@@ -935,21 +1297,18 @@ if st.session_state.processed_df is not None:
     # CATEGORY ANALYSIS
     # ========================================================
 
-    if category_column is not None:
+    if category_column:
 
         st.divider()
+
 
         st.markdown(
             '<div class="section-title">'
             '📈 Category Analysis'
             '</div>',
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
 
-
-        # ----------------------------------------------------
-        # Category counts
-        # ----------------------------------------------------
 
         category_counts = (
             transactions_df[
@@ -961,24 +1320,21 @@ if st.session_state.processed_df is not None:
         )
 
 
-        total_category_transactions = (
-            category_counts.sum()
-        )
-
-
-        # ----------------------------------------------------
-        # Chart Data
-        # ----------------------------------------------------
-
         chart_df = (
             category_counts
             .reset_index()
         )
 
+
         chart_df.columns = [
             "Category",
-            "Count"
+            "Count",
         ]
+
+
+        total_category_transactions = (
+            chart_df["Count"].sum()
+        )
 
 
         chart_df["Percentage"] = (
@@ -988,18 +1344,14 @@ if st.session_state.processed_df is not None:
         )
 
 
-        # ----------------------------------------------------
-        # Chart + Table
-        # ----------------------------------------------------
-
         chart_col, table_col = (
             st.columns([1.3, 1])
         )
 
 
-        # ====================================================
+        # ----------------------------------------------------
         # PIE CHART
-        # ====================================================
+        # ----------------------------------------------------
 
         with chart_col:
 
@@ -1014,22 +1366,22 @@ if st.session_state.processed_df is not None:
                     "mark": {
                         "type": "arc",
                         "innerRadius": 70,
-                        "tooltip": True
+                        "tooltip": True,
                     },
 
                     "encoding": {
 
                         "theta": {
                             "field": "Count",
-                            "type": "quantitative"
+                            "type": "quantitative",
                         },
 
                         "color": {
                             "field": "Category",
                             "type": "nominal",
                             "legend": {
-                                "title": "Category"
-                            }
+                                "title": "Category",
+                            },
                         },
 
                         "tooltip": [
@@ -1037,34 +1389,34 @@ if st.session_state.processed_df is not None:
                             {
                                 "field": "Category",
                                 "type": "nominal",
-                                "title": "Category"
+                                "title": "Category",
                             },
 
                             {
                                 "field": "Count",
                                 "type": "quantitative",
-                                "title": "Transactions"
+                                "title": "Transactions",
                             },
 
                             {
                                 "field": "Percentage",
                                 "type": "quantitative",
                                 "format": ".1f",
-                                "title": "Percentage"
-                            }
-                        ]
+                                "title": "Percentage",
+                            },
+                        ],
                     },
 
-                    "height": 400
+                    "height": 400,
                 },
 
-                use_container_width=True
+                use_container_width=True,
             )
 
 
-        # ====================================================
+        # ----------------------------------------------------
         # CATEGORY PERCENTAGES
-        # ====================================================
+        # ----------------------------------------------------
 
         with table_col:
 
@@ -1074,21 +1426,19 @@ if st.session_state.processed_df is not None:
 
 
             percentage_display = (
-                chart_df[
-                    [
-                        "Category",
-                        "Count",
-                        "Percentage"
-                    ]
-                ]
-                .copy()
+                chart_df.copy()
             )
 
 
-            percentage_display["Percentage"] = (
-                percentage_display["Percentage"]
+            percentage_display[
+                "Percentage"
+            ] = (
+                percentage_display[
+                    "Percentage"
+                ]
                 .map(
-                    lambda x: f"{x:.1f}%"
+                    lambda x:
+                    f"{x:.1f}%"
                 )
             )
 
@@ -1096,14 +1446,14 @@ if st.session_state.processed_df is not None:
             percentage_display.columns = [
                 "Category",
                 "Transactions",
-                "Percentage"
+                "Percentage",
             ]
 
 
             st.dataframe(
                 percentage_display,
                 use_container_width=True,
-                hide_index=True
+                hide_index=True,
             )
 
 
@@ -1116,8 +1466,8 @@ if st.session_state.processed_df is not None:
     else:
 
         st.info(
-            "No category/classification column was found "
-            "in the processed data."
+            "No category/classification column "
+            "was found in the processed data."
         )
 
 
@@ -1127,9 +1477,12 @@ if st.session_state.processed_df is not None:
 
     st.divider()
 
+
     st.markdown(
-        '<div class="section-title">📥 Export Results</div>',
-        unsafe_allow_html=True
+        '<div class="section-title">'
+        '📥 Export Results'
+        '</div>',
+        unsafe_allow_html=True,
     )
 
 
@@ -1139,11 +1492,20 @@ if st.session_state.processed_df is not None:
 
 
     # ========================================================
-    # CSV
+    # CREATE CLEAN EXPORT DATAFRAME
+    # ========================================================
+
+    export_df = get_display_dataframe(
+        transactions_df
+    )
+
+
+    # ========================================================
+    # CSV EXPORT
     # ========================================================
 
     csv_data = (
-        transactions_df
+        export_df
         .to_csv(index=False)
         .encode("utf-8")
     )
@@ -1151,18 +1513,25 @@ if st.session_state.processed_df is not None:
 
     with export_col1:
 
-        st.download_button(
+        csv_clicked = st.download_button(
             label="⬇️ Download CSV",
             data=csv_data,
             file_name="processed_bank_statement.csv",
             mime="text/csv",
             use_container_width=True,
-            on_click=csv_download_notice
         )
 
 
+        if csv_clicked:
+
+            st.toast(
+                "File downloaded successfully! 📥",
+                icon="✅",
+            )
+
+
     # ========================================================
-    # EXCEL
+    # EXCEL EXPORT
     # ========================================================
 
     with export_col2:
@@ -1174,17 +1543,17 @@ if st.session_state.processed_df is not None:
 
             with pd.ExcelWriter(
                 excel_buffer,
-                engine="openpyxl"
+                engine="openpyxl",
             ) as writer:
 
                 # --------------------------------------------
                 # Transactions
                 # --------------------------------------------
 
-                transactions_df.to_excel(
+                export_df.to_excel(
                     writer,
                     index=False,
-                    sheet_name="Transactions"
+                    sheet_name="Transactions",
                 )
 
 
@@ -1192,53 +1561,103 @@ if st.session_state.processed_df is not None:
                 # Category Summary
                 # --------------------------------------------
 
-                if category_column is not None:
+                if category_column:
 
                     chart_df[
                         [
                             "Category",
                             "Count",
-                            "Percentage"
+                            "Percentage",
                         ]
                     ].to_excel(
                         writer,
                         index=False,
-                        sheet_name="Category Summary"
+                        sheet_name="Category Summary",
                     )
 
 
                 # --------------------------------------------
-                # Classification Summary
+                # Account Details
                 # --------------------------------------------
 
-                if method_column is not None:
+                account_df = pd.DataFrame(
+                    [
+                        {
+                            "Field": "Account Holder",
+                            "Value": details.get(
+                                "account_holder",
+                                "Not detected",
+                            ),
+                        },
+                        {
+                            "Field": "Account Number",
+                            "Value": details.get(
+                                "account_number",
+                                "Not detected",
+                            ),
+                        },
+                        {
+                            "Field": "Bank Name",
+                            "Value": details.get(
+                                "bank_name",
+                                "Not detected",
+                            ),
+                        },
+                        {
+                            "Field": "IFSC Code",
+                            "Value": details.get(
+                                "ifsc",
+                                "Not detected",
+                            ),
+                        },
+                        {
+                            "Field": "Branch",
+                            "Value": details.get(
+                                "branch",
+                                "Not detected",
+                            ),
+                        },
+                        {
+                            "Field": "Statement Period",
+                            "Value": details.get(
+                                "statement_period",
+                                "Not detected",
+                            ),
+                        },
+                    ]
+                )
 
-                    method_counts.reset_index().rename(
-                        columns={
-                            method_column: "Method",
-                            "count": "Transactions"
-                        }
-                    ).to_excel(
-                        writer,
-                        index=False,
-                        sheet_name="Classification Summary"
-                    )
+
+                account_df.to_excel(
+                    writer,
+                    index=False,
+                    sheet_name="Account Details",
+                )
 
 
             excel_buffer.seek(0)
 
 
-            st.download_button(
-                label="⬇️ Download Excel",
-                data=excel_buffer,
-                file_name="processed_bank_statement.xlsx",
-                mime=(
-                    "application/vnd.openxmlformats-officedocument."
-                    "spreadsheetml.sheet"
-                ),
-                use_container_width=True,
-                on_click=excel_download_notice
+            excel_clicked = (
+                st.download_button(
+                    label="⬇️ Download Excel",
+                    data=excel_buffer,
+                    file_name="processed_bank_statement.xlsx",
+                    mime=(
+                        "application/vnd.openxmlformats-officedocument."
+                        "spreadsheetml.sheet"
+                    ),
+                    use_container_width=True,
+                )
             )
+
+
+            if excel_clicked:
+
+                st.toast(
+                    "File downloaded successfully! 📥",
+                    icon="✅",
+                )
 
 
         except Exception as e:
@@ -1255,65 +1674,34 @@ if st.session_state.processed_df is not None:
 st.divider()
 
 st.markdown(
-    '<div class="section-title">🧪 Testing Tools</div>',
-    unsafe_allow_html=True
+    '<div class="section-title">'
+    '🧪 Testing Tools — Generate Dummy Bank Statement'
+    '</div>',
+    unsafe_allow_html=True,
 )
 
 st.caption(
-    "Generate a synthetic bank statement for testing "
-    "the PDF extraction and classification pipeline."
+    "Generate a synthetic statement for testing. "
+    "The generated PDF can then be uploaded above."
 )
 
+if st.button(
+    "🧪 Generate Dummy Statement",
+    use_container_width=True,
+):
 
-testing_col1, testing_col2 = st.columns(
-    [1, 2]
-)
+    try:
 
-
-with testing_col1:
-
-    if st.button(
-        "🧪 Generate Dummy Statement",
-        use_container_width=True
-    ):
-
-        try:
-
-            generated_file = (
-                create_random_statement()
-            )
-
-
-            st.session_state.generated_file = (
-                str(generated_file)
-            )
-
-
-            st.success(
-                "Dummy statement generated successfully."
-            )
-
-
-        except Exception as e:
-
-            st.error(
-                f"Failed to generate dummy statement: {e}"
-            )
-
-
-with testing_col2:
-
-    generated_file = (
-        st.session_state.get(
-            "generated_file"
+        generated_file = (
+            create_random_statement()
         )
-    )
 
+        st.success(
+            "Dummy statement generated successfully! 🎉"
+        )
 
-    if generated_file:
-
-        st.caption(
-            "Generated test file:"
+        st.write(
+            "Generated file:"
         )
 
         st.code(
@@ -1322,5 +1710,11 @@ with testing_col2:
 
         st.info(
             "Upload the generated PDF using "
-            "the uploader above to test the pipeline."
+            "the uploader above."
+        )
+
+    except Exception as e:
+
+        st.error(
+            f"Failed to generate dummy statement: {e}"
         )
