@@ -14,46 +14,123 @@ import random
 
 
 # ============================================================
-# SYNTHETIC ACCOUNT STATEMENT GENERATOR
+# SYNTHETIC BANK STATEMENT GENERATOR
 # ============================================================
-# Creates exactly ONE synthetic PDF per execution.
 #
-# The PDF uses real-world bank/merchant names as transaction
-# data, but uses fictional account identifiers and a generic
-# document layout.
+# Generates ONE fictional bank statement PDF per execution.
 #
-# IMPORTANT:
-# Category is NOT included in the generated statement.
-# The classifier must determine the category itself.
+# The PDF contains:
+#   - Bank Name
+#   - Account Holder Name
+#   - Account Number
+#   - IFSC Code
+#   - Branch / City
+#   - Statement Period
+#   - Transaction table
 #
-# Date format:
-# DD/MM/YYYY
+# The PDF DOES NOT contain:
+#   - Transaction Category
+#   - Synthetic Account ID
+#   - Transaction Reference
+#   - Document Type
+#
+# Categories are used internally only to generate realistic
+# merchant descriptions. The classifier must determine the
+# category independently.
 # ============================================================
 
 
-REAL_BANK_NAMES = [
-    "HDFC Bank",
-    "ICICI Bank",
-    "State Bank of India",
-    "Axis Bank",
-    "Kotak Mahindra Bank",
-    "IndusInd Bank",
-    "Yes Bank",
-    "IDFC FIRST Bank",
-    "Federal Bank",
-    "Bank of Baroda",
-    "Punjab National Bank",
-    "Canara Bank",
-    "Union Bank of India",
-    "Bank of India",
-    "Indian Bank",
-    "AU Small Finance Bank",
-    "RBL Bank",
-    "South Indian Bank",
-    "IDBI Bank",
-    "Bandhan Bank",
+# ============================================================
+# BANKS
+# ============================================================
+
+BANKS = [
+    {
+        "name": "HDFC Bank",
+        "ifsc_prefix": "HDFC",
+    },
+    {
+        "name": "ICICI Bank",
+        "ifsc_prefix": "ICIC",
+    },
+    {
+        "name": "State Bank of India",
+        "ifsc_prefix": "SBIN",
+    },
+    {
+        "name": "Axis Bank",
+        "ifsc_prefix": "UTIB",
+    },
+    {
+        "name": "Kotak Mahindra Bank",
+        "ifsc_prefix": "KKBK",
+    },
+    {
+        "name": "IndusInd Bank",
+        "ifsc_prefix": "INDB",
+    },
+    {
+        "name": "Yes Bank",
+        "ifsc_prefix": "YESB",
+    },
+    {
+        "name": "IDFC FIRST Bank",
+        "ifsc_prefix": "IDFB",
+    },
+    {
+        "name": "Federal Bank",
+        "ifsc_prefix": "FDRL",
+    },
+    {
+        "name": "Bank of Baroda",
+        "ifsc_prefix": "BARB",
+    },
+    {
+        "name": "Punjab National Bank",
+        "ifsc_prefix": "PUNB",
+    },
+    {
+        "name": "Canara Bank",
+        "ifsc_prefix": "CNRB",
+    },
+    {
+        "name": "Union Bank of India",
+        "ifsc_prefix": "UBIN",
+    },
+    {
+        "name": "Bank of India",
+        "ifsc_prefix": "BKID",
+    },
+    {
+        "name": "Indian Bank",
+        "ifsc_prefix": "IDIB",
+    },
+    {
+        "name": "AU Small Finance Bank",
+        "ifsc_prefix": "AUBL",
+    },
+    {
+        "name": "RBL Bank",
+        "ifsc_prefix": "RATN",
+    },
+    {
+        "name": "South Indian Bank",
+        "ifsc_prefix": "SIBL",
+    },
+    {
+        "name": "IDBI Bank",
+        "ifsc_prefix": "IBKL",
+    },
+    {
+        "name": "Bandhan Bank",
+        "ifsc_prefix": "BDBL",
+    },
 ]
 
+
+# ============================================================
+# CUSTOMERS
+# ============================================================
 
 CUSTOMERS = [
     "Aarav Mehta",
@@ -74,6 +151,10 @@ CUSTOMERS = [
     "Meera Patel",
 ]
 
+
+# ============================================================
+# BRANCHES
+# ============================================================
 
 BRANCHES = [
     "Mumbai",
@@ -96,14 +177,15 @@ BRANCHES = [
 # ============================================================
 # INTERNAL CATEGORY → MERCHANT MAPPING
 # ============================================================
-# Category is used ONLY to select realistic merchants.
+#
+# IMPORTANT:
 # Category is NOT written into the PDF.
 #
-# Later, this can also be used as ground truth for evaluating
-# the classifier if we decide to build a controlled dataset.
+# It is used only to generate realistic descriptions.
 # ============================================================
 
 CATEGORIES = {
+
     "Groceries": [
         ("DMart", 250, 6000),
         ("BigBasket", 250, 5000),
@@ -196,25 +278,45 @@ CATEGORIES = {
 # HELPER FUNCTIONS
 # ============================================================
 
-def random_synthetic_account_id():
-    """Generate a fictional account identifier."""
+def generate_account_number():
+    """
+    Generate a fictional 12-digit Indian-style account number.
 
-    return "SYN-ACCT-" + "".join(
+    This is NOT a real account number.
+    """
+
+    return "".join(
         random.choices(
             "0123456789",
-            k=8,
+            k=12,
         )
     )
 
 
-def random_transaction_reference():
-    """Generate a fictional transaction reference."""
+def generate_ifsc(bank):
+    """
+    Generate a fictional-looking IFSC code.
 
-    return "TEST-" + "".join(
+    Format:
+        XXXX0XXXXXX
+
+    Example:
+        HDFC0XXXXXXX
+
+    The code is synthetic and intended only for testing.
+    """
+
+    branch_code = "".join(
         random.choices(
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-            k=10,
+            "0123456789",
+            k=6,
         )
+    )
+
+    return (
+        bank["ifsc_prefix"]
+        + "0"
+        + branch_code
     )
 
 
@@ -224,19 +326,17 @@ def random_transaction_reference():
 
 def create_random_statement(filename=None):
     """
-    Create exactly ONE random synthetic account statement PDF.
+    Create exactly ONE random synthetic bank statement PDF.
 
     If filename is omitted, the PDF is saved to the user's
     Downloads folder.
     """
 
-    # --------------------------------------------------------
-    # Random account information
-    # --------------------------------------------------------
+    # ========================================================
+    # ACCOUNT INFORMATION
+    # ========================================================
 
-    bank = random.choice(
-        REAL_BANK_NAMES
-    )
+    bank = random.choice(BANKS)
 
     customer = random.choice(
         CUSTOMERS
@@ -246,14 +346,23 @@ def create_random_statement(filename=None):
         BRANCHES
     )
 
+    account_number = (
+        generate_account_number()
+    )
+
+    ifsc_code = generate_ifsc(
+        bank
+    )
+
     transaction_count = random.randint(
         35,
         70,
     )
 
-    # --------------------------------------------------------
-    # Generate valid date range
-    # --------------------------------------------------------
+
+    # ========================================================
+    # DATE RANGE
+    # ========================================================
 
     start_date = datetime(
         random.randint(2024, 2026),
@@ -261,18 +370,23 @@ def create_random_statement(filename=None):
         random.randint(1, 20),
     )
 
-    end_date = start_date + timedelta(
-        days=transaction_count - 1
+    end_date = (
+        start_date
+        + timedelta(
+            days=transaction_count - 1
+        )
     )
 
-    # --------------------------------------------------------
-    # Default output → Downloads
-    # --------------------------------------------------------
+
+    # ========================================================
+    # OUTPUT LOCATION
+    # ========================================================
 
     if filename is None:
 
         downloads_dir = (
-            Path.home() / "Downloads"
+            Path.home()
+            / "Downloads"
         )
 
         downloads_dir.mkdir(
@@ -309,9 +423,10 @@ def create_random_statement(filename=None):
         exist_ok=True,
     )
 
-    # --------------------------------------------------------
-    # Create PDF
-    # --------------------------------------------------------
+
+    # ========================================================
+    # CREATE PDF
+    # ========================================================
 
     doc = SimpleDocTemplate(
         filename,
@@ -326,10 +441,22 @@ def create_random_statement(filename=None):
 
     story = []
 
+
+    # ========================================================
+    # TITLE
+    # ========================================================
+
+    story.append(
+        Paragraph(
+            f"{bank['name']}",
+            styles["Title"],
+        )
+    )
+
     story.append(
         Paragraph(
             "Account Statement",
-            styles["Title"],
+            styles["Heading2"],
         )
     )
 
@@ -340,27 +467,34 @@ def create_random_statement(filename=None):
         )
     )
 
-    # --------------------------------------------------------
-    # Account information
-    # --------------------------------------------------------
+
+    # ========================================================
+    # ACCOUNT INFORMATION
+    # ========================================================
+    #
+    # These are the fields that the extraction pipeline should
+    # identify.
+    # ========================================================
 
     info = [
-        ["Bank Name", bank],
-
-        ["Customer", customer],
 
         [
-            "Synthetic Account ID",
-            random_synthetic_account_id(),
+            "Account Holder Name",
+            customer,
         ],
 
         [
-            "Transaction Reference",
-            random_transaction_reference(),
+            "Account Number",
+            account_number,
         ],
 
         [
-            "Branch / City",
+            "IFSC Code",
+            ifsc_code,
+        ],
+
+        [
+            "Branch",
             branch,
         ],
 
@@ -372,23 +506,21 @@ def create_random_statement(filename=None):
                 f"{end_date:%d/%m/%Y}"
             ),
         ],
-
-        [
-            "Document Type",
-            "Synthetic test dataset",
-        ],
     ]
+
 
     info_table = Table(
         info,
         colWidths=[
-            160,
-            350,
+            170,
+            340,
         ],
     )
 
+
     info_table.setStyle(
         TableStyle([
+
             (
                 "FONTNAME",
                 (0, 0),
@@ -401,6 +533,13 @@ def create_random_statement(filename=None):
                 (0, 0),
                 (-1, -1),
                 9,
+            ),
+
+            (
+                "FONTNAME",
+                (0, 0),
+                (0, -1),
+                "Helvetica-Bold",
             ),
 
             (
@@ -434,7 +573,10 @@ def create_random_statement(filename=None):
         ])
     )
 
-    story.append(info_table)
+
+    story.append(
+        info_table
+    )
 
     story.append(
         Spacer(
@@ -443,33 +585,32 @@ def create_random_statement(filename=None):
         )
     )
 
+
     # ========================================================
     # TRANSACTION TABLE
-    # ========================================================
-    # IMPORTANT:
-    # No Category column.
     # ========================================================
 
     data = [[
         "Date",
-        "Merchant / Description",
+        "Description",
         "Debit",
         "Credit",
         "Balance",
     ]]
+
 
     balance = random.randint(
         25000,
         250000,
     )
 
-    # Salary date
+
     salary_day = random.randint(
         1,
         5,
     )
 
-    # Second credit date
+
     second_credit_day = random.randint(
         max(
             7,
@@ -480,6 +621,7 @@ def create_random_statement(filename=None):
             transaction_count // 2,
         ),
     )
+
 
     # ========================================================
     # GENERATE TRANSACTIONS
@@ -494,8 +636,9 @@ def create_random_statement(filename=None):
             + timedelta(days=i)
         )
 
+
         # ----------------------------------------------------
-        # Salary
+        # SALARY
         # ----------------------------------------------------
 
         if i + 1 == salary_day:
@@ -511,20 +654,17 @@ def create_random_statement(filename=None):
                 date.strftime(
                     "%d/%m/%Y"
                 ),
-
                 "SALARY CREDIT",
-
                 "",
-
                 f"{credit:,.2f}",
-
                 f"{balance:,.2f}",
             ])
 
             continue
 
+
         # ----------------------------------------------------
-        # Other income
+        # OTHER INCOME
         # ----------------------------------------------------
 
         if i + 1 == second_credit_day:
@@ -540,24 +680,21 @@ def create_random_statement(filename=None):
                 date.strftime(
                     "%d/%m/%Y"
                 ),
-
                 random.choice([
                     "CLIENT PAYMENT",
                     "FREELANCE PAYMENT",
                     "TRANSFER CREDIT",
                 ]),
-
                 "",
-
                 f"{credit:,.2f}",
-
                 f"{balance:,.2f}",
             ])
 
             continue
 
+
         # ----------------------------------------------------
-        # Refund / cashback
+        # REFUND / CASHBACK
         # ----------------------------------------------------
 
         if random.random() < 0.08:
@@ -573,7 +710,6 @@ def create_random_statement(filename=None):
                 date.strftime(
                     "%d/%m/%Y"
                 ),
-
                 random.choice([
                     "AMAZON REFUND",
                     "FLIPKART REFUND",
@@ -581,28 +717,28 @@ def create_random_statement(filename=None):
                     "ZOMATO REFUND",
                     "CASHBACK CREDIT",
                 ]),
-
                 "",
-
                 f"{credit:,.2f}",
-
                 f"{balance:,.2f}",
             ])
 
             continue
 
+
         # ----------------------------------------------------
-        # Normal expense
+        # NORMAL EXPENSE
         # ----------------------------------------------------
 
-        # Category is selected internally ONLY to choose
-        # a realistic merchant.
         category = random.choice(
-            list(CATEGORIES.keys())
+            list(
+                CATEGORIES.keys()
+            )
         )
 
-        merchant, minimum, maximum = random.choice(
-            CATEGORIES[category]
+        merchant, minimum, maximum = (
+            random.choice(
+                CATEGORIES[category]
+            )
         )
 
         amount = random.randint(
@@ -610,15 +746,21 @@ def create_random_statement(filename=None):
             maximum,
         )
 
+
         # Keep balance positive.
+
         if amount > balance - 1000:
 
             amount = max(
                 100,
-                int(balance * 0.10),
+                int(
+                    balance * 0.10
+                ),
             )
 
+
         balance -= amount
+
 
         data.append([
             date.strftime(
@@ -634,8 +776,9 @@ def create_random_statement(filename=None):
             f"{balance:,.2f}",
         ])
 
+
     # ========================================================
-    # TRANSACTION TABLE FORMAT
+    # TRANSACTION TABLE
     # ========================================================
 
     table = Table(
@@ -650,8 +793,10 @@ def create_random_statement(filename=None):
         repeatRows=1,
     )
 
+
     table.setStyle(
         TableStyle([
+
             (
                 "BACKGROUND",
                 (0, 0),
@@ -727,7 +872,11 @@ def create_random_statement(filename=None):
         ])
     )
 
-    story.append(table)
+
+    story.append(
+        table
+    )
+
 
     story.append(
         Spacer(
@@ -736,41 +885,55 @@ def create_random_statement(filename=None):
         )
     )
 
+
     story.append(
         Paragraph(
-            "Dummy Bank Statement",
+            "This is a fictional statement generated "
+            "for software testing purposes.",
             styles["Normal"],
         )
     )
+
 
     # ========================================================
     # BUILD PDF
     # ========================================================
 
-    doc.build(story)
+    doc.build(
+        story
+    )
+
 
     # ========================================================
     # LOG
     # ========================================================
 
     print("=" * 60)
-    print("GENERATED ONE RANDOM SYNTHETIC PDF")
+    print("GENERATED SYNTHETIC BANK STATEMENT")
     print("=" * 60)
 
     print(
-        f"Bank data field : {bank}"
+        f"Bank            : {bank['name']}"
     )
 
     print(
-        f"Customer        : {customer}"
+        f"Account Holder  : {customer}"
+    )
+
+    print(
+        f"Account Number  : {account_number}"
+    )
+
+    print(
+        f"IFSC Code       : {ifsc_code}"
+    )
+
+    print(
+        f"Branch          : {branch}"
     )
 
     print(
         f"Transactions    : {transaction_count}"
-    )
-
-    print(
-        f"Categories      : {len(CATEGORIES)}"
     )
 
     print(
@@ -786,5 +949,4 @@ def create_random_statement(filename=None):
 
 if __name__ == "__main__":
 
-    # Exactly ONE new random PDF per execution.
     create_random_statement()

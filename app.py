@@ -112,6 +112,10 @@ st.markdown(
 # SESSION STATE
 # ============================================================
 
+if "account_details" not in st.session_state:
+
+    st.session_state.account_details = None
+
 if "processed_df" not in st.session_state:
     st.session_state.processed_df = None
 
@@ -130,38 +134,38 @@ if "generated_file" not in st.session_state:
 # ============================================================
 
 def clear_content():
-    """
-    Clear all currently processed application content.
-    """
 
-    # --------------------------------------------------------
-    # Delete generated dummy statement if it exists
-    # --------------------------------------------------------
-
-    generated_file = st.session_state.get(
-        "generated_file"
+    generated_file = (
+        st.session_state.get(
+            "generated_file"
+        )
     )
 
     if generated_file:
 
         try:
 
-            if os.path.exists(generated_file):
-                os.remove(generated_file)
+            if os.path.exists(
+                generated_file
+            ):
+
+                os.remove(
+                    generated_file
+                )
 
         except Exception:
+
             pass
 
 
-    # --------------------------------------------------------
-    # Clear session state
-    # --------------------------------------------------------
-
     st.session_state.processed_df = None
+
+    st.session_state.account_details = None
+
     st.session_state.uploaded_filename = None
+
     st.session_state.generated_file = None
 
-    # Changing the uploader key resets the uploader.
     st.session_state.uploader_key += 1
 
 
@@ -537,6 +541,157 @@ if uploaded_file is not None:
 
                     pass
 
+# ============================================================
+# ACCOUNT INFORMATION
+# ============================================================
+
+if st.session_state.get("account_details"):
+
+    account_details = (
+        st.session_state.account_details
+    )
+
+    st.divider()
+
+    st.markdown(
+        '<div class="section-title">'
+        '👤 Account Information'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+    st.caption(
+        "Account information extracted from the bank statement."
+    )
+
+
+    # --------------------------------------------------------
+    # Account number masking
+    # --------------------------------------------------------
+
+    account_number = (
+        account_details.get(
+            "account_number"
+        )
+    )
+
+
+    if account_number:
+
+        account_number = str(
+            account_number
+        )
+
+        if len(account_number) > 4:
+
+            masked_account_number = (
+                "X" * (
+                    len(account_number) - 4
+                )
+                + account_number[-4:]
+            )
+
+        else:
+
+            masked_account_number = (
+                account_number
+            )
+
+    else:
+
+        masked_account_number = "Not detected"
+
+
+    # --------------------------------------------------------
+    # Values
+    # --------------------------------------------------------
+
+    bank_name = (
+        account_details.get(
+            "bank_name"
+        )
+        or "Not detected"
+    )
+
+    account_holder = (
+        account_details.get(
+            "account_holder_name"
+        )
+        or "Not detected"
+    )
+
+    ifsc = (
+        account_details.get(
+            "ifsc"
+        )
+        or "Not detected"
+    )
+
+    branch = (
+        account_details.get(
+            "branch"
+        )
+        or "Not detected"
+    )
+
+    statement_period = (
+        account_details.get(
+            "statement_period"
+        )
+        or "Not detected"
+    )
+
+
+    # --------------------------------------------------------
+    # Display
+    # --------------------------------------------------------
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+
+        st.metric(
+            "Account Holder",
+            account_holder
+        )
+
+    with col2:
+
+        st.metric(
+            "Account Number",
+            masked_account_number
+        )
+
+    with col3:
+
+        st.metric(
+            "Bank",
+            bank_name
+        )
+
+
+    col4, col5, col6 = st.columns(3)
+
+    with col4:
+
+        st.metric(
+            "IFSC",
+            ifsc
+        )
+
+    with col5:
+
+        st.metric(
+            "Branch",
+            branch
+        )
+
+    with col6:
+
+        st.metric(
+            "Statement Period",
+            statement_period
+        )
 
 # ============================================================
 # RESULTS
