@@ -442,6 +442,7 @@ Current limitations include:
 ## 15. Author
 
 **Aditya Salani**
+
 Bank Statement Processing & Classification System Project
 
 Built as a prototype for demonstrating:
