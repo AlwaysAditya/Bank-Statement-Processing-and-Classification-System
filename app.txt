@@ -1,0 +1,60 @@
+import streamlit as st
+
+from dummy_statement_generator import create_random_statement
+
+
+st.set_page_config(
+    page_title="Bank Statement Processor",
+    page_icon="🏦",
+    layout="wide"
+)
+
+
+st.title("🏦 Bank Statement Processing & Classification System")
+
+st.write(
+    "Upload a bank statement PDF to extract and classify transactions."
+)
+
+
+# ============================================================
+# TESTING ONLY - Dummy Statement Generator
+# ============================================================
+
+st.subheader("Testing Tools")
+
+st.caption(
+    "Testing purposes only — generate a synthetic bank statement "
+    "for testing the PDF processing pipeline."
+)
+
+if st.button("🧪 Generate Dummy Statement"):
+
+    generated_file = create_random_statement()
+
+    st.success("Dummy statement generated successfully.")
+
+    st.info(
+        f"Saved to: {generated_file}"
+    )
+
+
+st.divider()
+
+
+# ============================================================
+# PDF UPLOAD
+# ============================================================
+
+st.subheader("Upload Bank Statement")
+
+uploaded_file = st.file_uploader(
+    "Upload Bank Statement PDF",
+    type=["pdf"]
+)
+
+if uploaded_file:
+
+    st.success(
+        f"File uploaded: {uploaded_file.name}"
+    )

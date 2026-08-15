@@ -11,3 +11,4 @@ openpyxl
 joblib
 python-dateutil
 pytest
+reportlab

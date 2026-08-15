@@ -1,0 +1,76 @@
+                         ┌───────────────┐
+                         │   Streamlit   │
+                         │    app.py     │
+                         └───────┬───────┘
+                                 │
+                                 ▼
+                         ┌───────────────┐
+                         │ Upload PDF    │
+                         └───────┬───────┘
+                                 │
+                                 ▼
+                    ┌────────────────────────┐
+                    │   pdf_detector.py      │
+                    │                        │
+                    │ Is PDF text-based or   │
+                    │ image/scanned?         │
+                    └───────────┬────────────┘
+                                │
+                    ┌───────────┴───────────┐
+                    │                       │
+              TEXT PDF                 IMAGE PDF
+                    │                       │
+                    ▼                       ▼
+        ┌───────────────────┐    ┌───────────────────┐
+        │ text_processor.py │    │ ocr_processor.py  │
+        │                   │    │                   │
+        │ PyMuPDF           │    │ PDF → Image       │
+        │ pdfplumber        │    │ OpenCV            │
+        │ Text/Table        │    │ Tesseract OCR     │
+        │ Extraction        │    │                   │
+        └─────────┬─────────┘    └─────────┬─────────┘
+                  │                        │
+                  └───────────┬────────────┘
+                              ▼
+                 ┌────────────────────────┐
+                 │ transaction_extractor.py│
+                 │                        │
+                 │ Account details        │
+                 │ Date                   │
+                 │ Description            │
+                 │ Debit                  │
+                 │ Credit                 │
+                 │ Balance                │
+                 └────────────┬───────────┘
+                              ▼
+                    ┌──────────────────┐
+                    │ Data Cleaning &  │
+                    │ Normalization    │
+                    └────────┬─────────┘
+                             ▼
+                    ┌──────────────────┐
+                    │   validator.py   │
+                    │                  │
+                    │ Missing data     │
+                    │ Duplicates       │
+                    │ Balance checks   │
+                    └────────┬─────────┘
+                             ▼
+                    ┌──────────────────┐
+                    │   classifier.py  │
+                    │                  │
+                    │ Rule-based       │
+                    │       ↓          │
+                    │ Traditional ML   │
+                    └────────┬─────────┘
+                             ▼
+                    ┌──────────────────┐
+                    │   Final Data     │
+                    └────────┬─────────┘
+                             ▼
+                  ┌──────────┴──────────┐
+                  ▼                     ▼
+            ┌───────────┐         ┌───────────┐
+            │ CSV       │         │ Excel     │
+            │ Export    │         │ Export    │
+            └───────────┘         └───────────┘
