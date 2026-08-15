@@ -1673,48 +1673,87 @@ if st.session_state.processed_df is not None:
 
 st.divider()
 
-st.markdown(
-    '<div class="section-title">'
-    '🧪 Testing Tools — Generate Dummy Bank Statement'
-    '</div>',
-    unsafe_allow_html=True,
-)
-
-st.caption(
-    "Generate a synthetic statement for testing. "
-    "The generated PDF can then be uploaded above."
-)
-
-if st.button(
-    "🧪 Generate Dummy Statement",
-    use_container_width=True,
+with st.expander(
+    "🧪 Testing Tools — Generate Dummy Bank Statement",
+    expanded=True,
 ):
 
-    try:
+    st.caption(
+        "Generate a synthetic statement for testing. "
+        "The generated PDF can then be downloaded and uploaded "
+        "to the processor above."
+    )
 
-        generated_file = (
-            create_random_statement()
-        )
+    if st.button(
+        "🧪 Generate Dummy Statement",
+        use_container_width=True,
+    ):
 
-        st.success(
-            "Dummy statement generated successfully! 🎉"
-        )
+        try:
 
-        st.write(
-            "Generated file:"
-        )
+            # ------------------------------------------------
+            # Generate dummy PDF
+            # ------------------------------------------------
 
-        st.code(
-            str(generated_file)
-        )
+            generated_file = (
+                create_random_statement()
+            )
 
-        st.info(
-            "Upload the generated PDF using "
-            "the uploader above."
-        )
+            # ------------------------------------------------
+            # Verify generated file
+            # ------------------------------------------------
 
-    except Exception as e:
+            if not os.path.exists(generated_file):
 
-        st.error(
-            f"Failed to generate dummy statement: {e}"
-        )
+                st.error(
+                    "The dummy statement was generated, "
+                    "but the PDF file could not be found."
+                )
+
+            else:
+
+                # --------------------------------------------
+                # Read PDF into memory
+                # --------------------------------------------
+
+                with open(
+                    generated_file,
+                    "rb",
+                ) as pdf_file:
+
+                    pdf_data = pdf_file.read()
+
+                # --------------------------------------------
+                # Success message
+                # --------------------------------------------
+
+                st.success(
+                    "Dummy statement generated successfully! 🎉"
+                )
+
+                # --------------------------------------------
+                # Download button
+                # --------------------------------------------
+
+                st.download_button(
+                    label="⬇️ Download Dummy Statement PDF",
+                    data=pdf_data,
+                    file_name="dummy_bank_statement.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                )
+
+                # --------------------------------------------
+                # Upload instruction
+                # --------------------------------------------
+
+                st.info(
+                    "Download the PDF above and upload it "
+                    "using the Bank Statement uploader."
+                )
+
+        except Exception as e:
+
+            st.error(
+                f"Failed to generate dummy statement: {e}"
+            )
