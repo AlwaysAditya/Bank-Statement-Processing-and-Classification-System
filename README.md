@@ -401,22 +401,7 @@ The prototype is designed with common bank-statement variations in mind:
 
 ---
 
-## 13. Limitations
-
-This is a prototype, not a production banking-data ingestion system.
-
-Current limitations include:
-
-- Bank layouts vary significantly and may require bank-specific parsing rules
-- OCR accuracy depends on document quality
-- Complex tables may require additional layout-aware extraction
-- Transaction classification accuracy depends on available training data and rules
-- Account-detail extraction may require additional bank-specific patterns
-- Password-protected/encrypted PDFs may require additional handling
-
----
-
-## 14. Assessment Alignment
+## 13. Assessment Alignment
 
 | Assessment Requirement | Implementation |
 |---|---|
@@ -438,23 +423,6 @@ Current limitations include:
 | Prototype UI | Streamlit |
 
 ---
-
-## 15. Author
-
-**Aditya Salani**
-
-Bank Statement Processing & Classification System Project
-
-Built as a prototype for demonstrating:
-
-- Document processing
-- OCR
-- Python automation
-- Data extraction
-- Rule-based classification
-- Traditional machine learning
-- Streamlit application development
-- Data export
 
 ## 📜 License
 
