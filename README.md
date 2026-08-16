@@ -455,3 +455,11 @@ Built as a prototype for demonstrating:
 - Traditional machine learning
 - Streamlit application development
 - Data export
+
+## 📜 License
+
+This project is licensed under the [MIT License](LICENSE).
+
+---
+
+**Built with Python · Streamlit · Pandas · PyMuPDF · Pytesseract · scikit-learn · Pillow · TF-IDF · Joblib · OpenPyXL · ReportLab · Regex**
